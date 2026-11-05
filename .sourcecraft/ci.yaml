@@ -1,0 +1,36 @@
+on:
+  push: core-compat-check
+
+  pull_request:
+    - workflows: core-compat-check
+      filter:
+        target_branches: "main"
+
+  schedule:
+    - workflows: core-compat-check
+      interval: 3h
+      description: Проверка совместимости модуля с последней версией ядра AzerothCore
+
+workflows:
+  core-compat-check:
+    tasks:
+      - name: build-module-against-core
+        cubes:
+          - name: build-check
+            image: ubuntu:22.04
+            script:
+              - "set -e"
+              - "export DEBIAN_FRONTEND=noninteractive"
+              - "apt-get update"
+              - "apt-get install -y --no-install-recommends git build-essential cmake clang libboost-all-dev libmysqlclient-dev libssl-dev libreadline-dev zlib1g-dev libbz2-dev libzstd-dev"
+              - "git --version && cmake --version"
+              - "git clone --depth 1 https://github.com/maxorlov59rus/azerothcore-wotlk.git /workspace/core"
+              - "cd /workspace/core && git log -1 --oneline"
+              - "mkdir -p /workspace/core/modules"
+              - "cp -r \"$(pwd)\" /workspace/core/modules/mod-ai-bots"
+              - "ls /workspace/core/modules/mod-ai-bots"
+              - "mkdir -p /workspace/build"
+              - "cd /workspace/build"
+              - "cmake ../core -DCMAKE_BUILD_TYPE=Release -DSCRIPTS=static -DTOOLS=0"
+              - "make mod-ai-bots -j$(nproc)"
+              - "echo '=== RESULT: модуль mod-ai-bots успешно собран против последней версии ядра ==='"

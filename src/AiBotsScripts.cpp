@@ -43,6 +43,9 @@ public:
             { "follow",    HandleBotFollow,    SEC_PLAYER, Console::No },
             { "shop",      HandleBotShop,      SEC_PLAYER, Console::No },
             { "buy",       HandleBotBuy,       SEC_PLAYER, Console::No },
+            { "gold",      HandleBotGold,      SEC_PLAYER, Console::No },
+            { "pet",       HandleBotPet,       SEC_PLAYER, Console::No },
+            { "groups",    HandleBotGroups,    SEC_PLAYER, Console::No },
             { "territory", HandleBotTerritory, SEC_PLAYER, Console::No },
             { "guild",     HandleBotGuild,     SEC_PLAYER, Console::No },
             { "siege",     HandleBotSiege,     SEC_PLAYER, Console::No },
@@ -239,6 +242,116 @@ public:
         return true;
     }
 
+    // Команда .bot gold — показать виртуальные кошельки ботов игрока.
+    // Лут собирается автоматически (BotLoot), но не имел пользовательского интерфейса.
+    static bool HandleBotGold(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!player)
+            return false;
+
+        auto const& bots = sBotMgr->GetBotsOfOwner(player->GetGUID().GetCounter());
+        if (bots.empty())
+        {
+            handler->PSendSysMessage("[AI-Bot] У вас нет ботов. Создайте: .bot add [race:class]");
+            return true;
+        }
+
+        handler->PSendSysMessage("[AI-Bot] Кошельки ваших ботов:");
+        for (auto const& bot : bots)
+        {
+            uint32 copper = AiBotsLoot::GetGold(bot.guid);
+            handler->PSendSysMessage("  - {}: {}з {}с {}м",
+                bot.name, copper / 10000, (copper / 100) % 100, copper % 100);
+        }
+
+        return true;
+    }
+
+    // Команда .bot pet — призвать питомца ботам-охотникам/чернокнижникам.
+    // Подсистема BotPets была полностью автоматической без ручного управления.
+    static bool HandleBotPet(ChatHandler* handler)
+    {
+        Player* player = handler->GetSession() ? handler->GetSession()->GetPlayer() : nullptr;
+        if (!player)
+            return false;
+
+        if (!AiBotsConfig::IsPetsEnabled())
+        {
+            handler->PSendSysMessage("[AI-Bot] Питомцы выключены (AiBots.Pets.Enable = 0).");
+            return true;
+        }
+
+        uint32 summoned = 0;
+        for (auto const& bot : sBotMgr->GetBotsOfOwner(player->GetGUID().GetCounter()))
+        {
+            if (!bot.inWorld || !AiBotsPets::ClassHasPet(bot.cls))
+                continue;
+
+            Player* botPlayer = sBotMgr->GetBotPlayer(bot.guid);
+            if (!botPlayer || !botPlayer->IsInWorld())
+                continue;
+
+            if (AiBotsPets::SummonPetFor(botPlayer))
+                ++summoned;
+        }
+
+        if (summoned > 0)
+            handler->PSendSysMessage("[AI-Bot] Призвано питомцев: {}.", summoned);
+        else
+            handler->PSendSysMessage("[AI-Bot] Нет ботов в мире с классом питомца (охотник/чернокнижник).");
+
+        return true;
+    }
+
+    // Команда .bot groups — список групп автономных ботов.
+    // API групп (BotGroups) был доступен только внутренним подсистемам.
+    static bool HandleBotGroups(ChatHandler* handler)
+    {
+        if (!AiBotsConfig::IsGroupsEnabled())
+        {
+            handler->PSendSysMessage("[AI-Bot] Группы ботов выключены.");
+            return true;
+        }
+
+        // Собираем уникальные группы: группируем боты по guid лидера.
+        std::map<ObjectGuid::LowType, std::vector<std::string>> groupsByLeader;
+        for (auto const& pair : sBotMgr->GetAllBots())
+        {
+            auto const* group = AiBotsGroups::GetGroupOf(pair.first);
+            if (!group)
+                continue;
+
+            Player* member = sBotMgr->GetBotPlayer(pair.first);
+            if (!member || !member->IsInWorld())
+                continue;
+
+            groupsByLeader[group->leaderGuid].push_back(member->GetName());
+        }
+
+        if (groupsByLeader.empty())
+        {
+            handler->PSendSysMessage("[AI-Bot] Сейчас нет активных групп ботов.");
+            return true;
+        }
+
+        handler->PSendSysMessage("[AI-Bot] Группы ботов:");
+        for (auto const& entry : groupsByLeader)
+        {
+            Player* leader = sBotMgr->GetBotPlayer(entry.first);
+            std::string leaderName = leader && leader->IsInWorld()
+                ? leader->GetName() : "<нет в мире>";
+
+            handler->PSendSysMessage("  Лидер '{}', участников {}:",
+                leaderName, entry.second.size());
+            for (auto const& memberName : entry.second)
+                if (memberName != leaderName)
+                    handler->PSendSysMessage("    - {}", memberName);
+        }
+
+        return true;
+    }
+
     static bool HandleBotTerritory(ChatHandler* handler)
     {
         if (!AiBotsConfig::IsTerritoryEnabled())
@@ -262,25 +375,27 @@ public:
             return true;
         }
 
-        handler->PSendSysMessage("[AI-Bot] Гильдия '{}':", AiBotsConfig::GetGuildName());
-        handler->PSendSysMessage("  Уровень: {}/{}", AiBotsGuild::GetLevel(), AiBotsConfig::GetGuildMaxLevel());
-        handler->PSendSysMessage("  Опыт: {}/{}", AiBotsGuild::GetXp(), AiBotsGuild::GetXpForNextLevel());
-        handler->PSendSysMessage("  Казна: {}з {}с {}м",
-            AiBotsGuild::GetVault() / 10000, (AiBotsGuild::GetVault() / 100) % 100, AiBotsGuild::GetVault() % 100);
-        handler->PSendSysMessage("  Состав: {} участников", AiBotsGuild::GetMemberCount());
+        // Гильдии отдельные для каждой фракции — выводим обе.
+        TeamId const teams[] = { TEAM_ALLIANCE, TEAM_HORDE };
+        for (TeamId team : teams)
+        {
+            handler->PSendSysMessage("[AI-Bot] Гильдия '{}' ({}):",
+                AiBotsGuild::GetGuildNameFor(team),
+                team == TEAM_HORDE ? "Орда" : "Альянс");
+            handler->PSendSysMessage("  Уровень: {}/{}",
+                AiBotsGuild::GetLevel(team), AiBotsConfig::GetGuildMaxLevel());
+            handler->PSendSysMessage("  Опыт: {}/{}",
+                AiBotsGuild::GetXp(team), AiBotsGuild::GetXpForNextLevel(team));
+            uint32 vault = AiBotsGuild::GetVault(team);
+            handler->PSendSysMessage("  Казна: {}з {}с {}м",
+                vault / 10000, (vault / 100) % 100, vault % 100);
+            handler->PSendSysMessage("  Состав: {} участников", AiBotsGuild::GetMemberCount(team));
 
-        // Активные перки.
-        handler->PSendSysMessage("  Перки:");
-        uint32 xpPct = AiBotsGuild::GetXpBonusPct();
-        uint32 goldPct = AiBotsGuild::GetGoldBonusPct();
-        uint32 spdPct = AiBotsGuild::GetMoveSpeedBonusPct();
-        if (xpPct > 100)   handler->PSendSysMessage("    [Fast Track] +{}% XP", xpPct - 100);
-        if (goldPct > 100) handler->PSendSysMessage("    [Cash Flow/Bartering] +{}% золота", goldPct - 100);
-        if (spdPct > 0)    handler->PSendSysMessage("    [Dead Man's Shoes] +{}% скорость духа", spdPct);
-
-        uint32 pct = AiBotsGuild::GetXpForNextLevel()
-            ? (AiBotsGuild::GetXp() * 100) / AiBotsGuild::GetXpForNextLevel() : 0;
-        handler->PSendSysMessage("  Прогресс: {}%", pct);
+            uint32 xp = AiBotsGuild::GetXp(team);
+            uint32 xpNext = AiBotsGuild::GetXpForNextLevel(team);
+            uint32 pct = xpNext ? (xp * 100) / xpNext : 0;
+            handler->PSendSysMessage("  Прогресс: {}%", pct);
+        }
 
         return true;
     }

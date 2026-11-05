@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mod-ai-bots — AI Bots для AzerothCore</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg-card: #171a23;
+    --border: #262b38;
+    --accent: #f34b7d;
+    --accent-soft: rgba(243, 75, 125, 0.12);
+    --text: #e8eaf0;
+    --text-dim: #9aa1b2;
+    --code-bg: #1c2030;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  header {
+    padding: 64px 0 48px;
+    background: linear-gradient(180deg, rgba(243,75,125,0.08) 0%, transparent 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.02em; }
+  h1 .accent { color: var(--accent); }
+  .subtitle { color: var(--text-dim); margin-top: 12px; font-size: 1.1rem; max-width: 720px; }
+  .badges { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 20px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 0.85rem; font-weight: 600;
+  }
+  .badge.gray { background: var(--code-bg); color: var(--text-dim); }
+
+  .lang-switch { position: absolute; top: 24px; right: 24px; display: flex; gap: 8px; }
+  .lang-btn {
+    padding: 6px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg-card);
+    color: var(--text-dim); font-weight: 600; font-size: 0.9rem;
+  }
+  .lang-btn.active { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+  section { padding: 40px 0; border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5rem; margin-bottom: 20px; font-weight: 700; }
+  h3 { font-size: 1.1rem; margin: 24px 0 10px; color: var(--accent); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .card h4 { margin-bottom: 8px; font-size: 1rem; }
+  .card p { color: var(--text-dim); font-size: 0.92rem; }
+
+  ul.feature-list { list-style: none; }
+  ul.feature-list li {
+    padding: 6px 0 6px 26px; position: relative; color: var(--text-dim);
+  }
+  ul.feature-list li::before {
+    content: "▸"; position: absolute; left: 4px; color: var(--accent); font-weight: 700;
+  }
+
+  table { width: 100%; border-collapse: collapse; background: var(--bg-card);
+    border-radius: 12px; overflow: hidden; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  th { background: var(--code-bg); color: var(--text); font-weight: 600; }
+  td { color: var(--text-dim); }
+  td code, p code, li code {
+    background: var(--code-bg); padding: 2px 7px; border-radius: 6px;
+    font-family: "SF Mono", Consolas, monospace; font-size: 0.85em; color: var(--accent);
+  }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 20px; overflow-x: auto; font-size: 0.88rem; margin: 12px 0;
+    font-family: "SF Mono", Consolas, monospace; color: #c8cede;
+  }
+  pre .c { color: #6b7280; }
+
+  footer { padding: 32px 0 48px; text-align: center; color: var(--text-dim); font-size: 0.9rem; }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="lang-switch">
+  <button class="lang-btn active" id="btn-ru" onclick="setLang('ru')">RU</button>
+  <button class="lang-btn" id="btn-en" onclick="setLang('en')">EN</button>
+</div>
+
+<!-- ==================== RU ==================== -->
+<div id="lang-ru">
+  <header>
+    <div class="container">
+      <h1>mod-<span class="accent">ai-bots</span></h1>
+      <p class="subtitle">Модуль AI-ботов для AzerothCore (3.3.5a). Боты — полноценные персонажи-игроки: следуют за владельцем, сражаются, используют заклинания, лечатся, баффуются, отступают при низком здоровье и общаются в чате. У каждого бота свой характер, внешность и экипировка.</p>
+      <div class="badges">
+        <span class="badge">AzerothCore 3.3.5a</span>
+        <span class="badge">C++</span>
+        <span class="badge gray">GPL-2.0</span>
+        <span class="badge gray">AC-modules</span>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <h2>Возможности</h2>
+      <div class="cards">
+        <div class="card">
+          <h4>🤖 Боты игрока</h4>
+          <p>Команды <code>.bot add / remove / list / follow</code>, следование за владельцем, бой рядом с ним, автоспавн при логине, синхронизация уровня.</p>
+        </div>
+        <div class="card">
+          <h4>🌍 Автономные боты в мире</h4>
+          <p>Спавн при старте сервера (3 режима точек), самостоятельный поиск мобов, PvP между фракциями, респавн после смерти.</p>
+        </div>
+        <div class="card">
+          <h4>🎭 Индивидуальность</h4>
+          <p>5 личностей с репликами (Aggressive, Calm, Jester, Grump, Hero), случайная внешность, экипировка по классу, ~21 000 комбинаций имён.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Живой мир</h2>
+      <ul class="feature-list">
+        <li><strong>Группы ботов</strong> — боты одной фракции объединяются, лидер координирует атаку, лекари лечат товарищей</li>
+        <li><strong>Социализация и дуэли</strong> — приветствия, угрозы и короткие честные бои 1v1 между фракциями</li>
+        <li><strong>Боты-торговцы</strong> — покупка предметов у ботов за игровое золото</li>
+        <li><strong>Территории</strong> — точки спавна принадлежат фракциям и периодически переходят из рук в руки</li>
+        <li><strong>Гильдии ботов</strong> — отдельные для Альянса и Орды: уровни 1–25, XP, казна, гильдейские перки</li>
+        <li><strong>Осады городов</strong> — отряды ботов штурмуют вражеские столицы</li>
+        <li><strong>Питомцы</strong> — охотники призывают зверей, чернокнижники — демонов</li>
+        <li><strong>Лут</strong> — боты собирают золото с убитых мобов в виртуальный кошелёк</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Команды</h2>
+      <table>
+        <tr><th>Команда</th><th>Описание</th></tr>
+        <tr><td><code>.bot add [race:class]</code></td><td>Создать бота (например <code>.bot add 7:8</code> — гном-маг)</td></tr>
+        <tr><td><code>.bot remove [имя]</code></td><td>Удалить бота по имени (или всех своих)</td></tr>
+        <tr><td><code>.bot list</code></td><td>Список своих ботов</td></tr>
+        <tr><td><code>.bot follow</code></td><td>Вернуть ботов к следованию за вами</td></tr>
+        <tr><td><code>.bot gold</code></td><td>Кошельки ваших ботов (золото из лута)</td></tr>
+        <tr><td><code>.bot pet</code></td><td>Призвать питомца ботам-охотникам/чернокнижникам</td></tr>
+        <tr><td><code>.bot shop / .bot buy &lt;№&gt;</code></td><td>Покупка у бота-торговца (радиус 15 ярдов)</td></tr>
+        <tr><td><code>.bot groups</code></td><td>Активные группы автономных ботов</td></tr>
+        <tr><td><code>.bot territory</code></td><td>Территории и их владельцы</td></tr>
+        <tr><td><code>.bot guild</code></td><td>Гильдии ботов обеих фракций</td></tr>
+        <tr><td><code>.bot siege</code></td><td>Статус осад городов</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Установка</h2>
+      <h3>1. Клонирование модуля</h3>
+      <pre>cd azerothcore-wotlk/modules
+git clone &lt;url-репозитория&gt; mod-ai-bots</pre>
+      <h3>2. Сборка</h3>
+      <pre>cd azerothcore-wotlk
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ac-server
+make -j$(nproc) &amp;&amp; make install</pre>
+      <h3>3. SQL</h3>
+      <pre>mysql -u root -p acore_world &lt; modules/mod-ai-bots/data/sql/db-world/mod_ai_bots.sql</pre>
+      <h3>4. Конфигурация</h3>
+      <pre>cp modules/mod-ai-bots/conf/mod_ai_bots.conf.dist $HOME/ac-server/etc/mod_ai_bots.conf</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Основные настройки</h2>
+      <table>
+        <tr><th>Опция</th><th>По умолчанию</th><th>Описание</th></tr>
+        <tr><td><code>AiBots.Enable</code></td><td>0</td><td>Включение модуля</td></tr>
+        <tr><td><code>AiBots.MaxBotsPerPlayer</code></td><td>1</td><td>Лимит ботов на игрока</td></tr>
+        <tr><td><code>AiBots.AutoSpawn</code></td><td>0</td><td>Автосоздание бота при логине</td></tr>
+        <tr><td><code>AiBots.UpdateInterval</code></td><td>500</td><td>Интервал тика AI, мс</td></tr>
+        <tr><td><code>AiBots.WorldBots.Enable</code></td><td>1</td><td>Автономные боты</td></tr>
+        <tr><td><code>AiBots.WorldBots.Count</code></td><td>10</td><td>Количество ботов в мире</td></tr>
+        <tr><td><code>AiBots.WorldBots.SpawnMode</code></td><td>0</td><td>0 = SQL, 1 = у игроков, 2 = стартовые зоны</td></tr>
+        <tr><td><code>AiBots.Tactics.FleeHealthPct</code></td><td>20</td><td>HP ниже порога → отступление</td></tr>
+        <tr><td><code>AiBots.Tactics.HealThresholdPct</code></td><td>50</td><td>HP ниже порога → лечение</td></tr>
+        <tr><td><code>AiBots.Guild.Enable</code></td><td>1</td><td>Гильдии ботов</td></tr>
+        <tr><td><code>AiBots.Siege.Enable</code></td><td>1</td><td>Осады городов</td></tr>
+        <tr><td><code>AiBots.Pets.Enable</code></td><td>1</td><td>Питомцы ботов</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>mod-ai-bots · Лицензия GPL-2.0 (как AzerothCore)</p>
+      <p><a href="https://sourcecraft.dev/crazy-voin/mod-ai-bots">Репозиторий на SourceCraft</a></p>
+    </div>
+  </footer>
+</div>
+
+<!-- ==================== EN ==================== -->
+<div id="lang-en" hidden>
+  <header>
+    <div class="container">
+      <h1>mod-<span class="accent">ai-bots</span></h1>
+      <p class="subtitle">AI bots module for AzerothCore (3.3.5a). Bots are fully-fledged player characters: they follow their owner, fight, cast class spells, heal, buff up, flee at low health and chat. Each bot has its own personality, appearance and gear.</p>
+      <div class="badges">
+        <span class="badge">AzerothCore 3.3.5a</span>
+        <span class="badge">C++</span>
+        <span class="badge gray">GPL-2.0</span>
+        <span class="badge gray">AC-modules</span>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="container">
+      <h2>Features</h2>
+      <div class="cards">
+        <div class="card">
+          <h4>🤖 Player bots</h4>
+          <p><code>.bot add / remove / list / follow</code> commands, following the owner, fighting alongside them, auto-spawn on login, level sync.</p>
+        </div>
+        <div class="card">
+          <h4>🌍 Autonomous world bots</h4>
+          <p>Spawn at server startup (3 spawn-point modes), find mobs on their own, faction PvP, respawn after death.</p>
+        </div>
+        <div class="card">
+          <h4>🎭 Individuality</h4>
+          <p>5 personalities with chat lines (Aggressive, Calm, Jester, Grump, Hero), random appearance, class gear, ~21,000 name combinations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Living world</h2>
+      <ul class="feature-list">
+        <li><strong>Bot groups</strong> — same-faction bots team up: the leader coordinates attacks, healers tend to the wounded</li>
+        <li><strong>Social behavior &amp; duels</strong> — greetings, threats and short fair 1v1 fights between factions</li>
+        <li><strong>Bot vendors</strong> — players buy items from bots for in-game gold</li>
+        <li><strong>Territories</strong> — spawn points belong to factions and periodically change hands</li>
+        <li><strong>Bot guilds</strong> — separate for Alliance and Horde: levels 1–25, XP, vault, guild perks</li>
+        <li><strong>City sieges</strong> — bot squads storm enemy capitals</li>
+        <li><strong>Pets</strong> — hunters summon beasts, warlocks summon demons</li>
+        <li><strong>Loot</strong> — bots collect gold from killed mobs into a virtual wallet</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Commands</h2>
+      <table>
+        <tr><th>Command</th><th>Description</th></tr>
+        <tr><td><code>.bot add [race:class]</code></td><td>Create a bot (e.g. <code>.bot add 7:8</code> — gnome mage)</td></tr>
+        <tr><td><code>.bot remove [name]</code></td><td>Remove a bot by name (or all of yours)</td></tr>
+        <tr><td><code>.bot list</code></td><td>List your bots</td></tr>
+        <tr><td><code>.bot follow</code></td><td>Make your bots follow you again</td></tr>
+        <tr><td><code>.bot gold</code></td><td>Your bots' wallets (loot gold)</td></tr>
+        <tr><td><code>.bot pet</code></td><td>Summon a pet for hunter/warlock bots</td></tr>
+        <tr><td><code>.bot shop / .bot buy &lt;№&gt;</code></td><td>Buy from a bot vendor (15 yards radius)</td></tr>
+        <tr><td><code>.bot groups</code></td><td>Active autonomous bot groups</td></tr>
+        <tr><td><code>.bot territory</code></td><td>Territories and their owners</td></tr>
+        <tr><td><code>.bot guild</code></td><td>Both faction bot guilds</td></tr>
+        <tr><td><code>.bot siege</code></td><td>City siege status</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Installation</h2>
+      <h3>1. Clone the module</h3>
+      <pre>cd azerothcore-wotlk/modules
+git clone &lt;repository-url&gt; mod-ai-bots</pre>
+      <h3>2. Build</h3>
+      <pre>cd azerothcore-wotlk
+mkdir build &amp;&amp; cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ac-server
+make -j$(nproc) &amp;&amp; make install</pre>
+      <h3>3. SQL</h3>
+      <pre>mysql -u root -p acore_world &lt; modules/mod-ai-bots/data/sql/db-world/mod_ai_bots.sql</pre>
+      <h3>4. Configuration</h3>
+      <pre>cp modules/mod-ai-bots/conf/mod_ai_bots.conf.dist $HOME/ac-server/etc/mod_ai_bots.conf</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="container">
+      <h2>Key options</h2>
+      <table>
+        <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>AiBots.Enable</code></td><td>0</td><td>Enable the module</td></tr>
+        <tr><td><code>AiBots.MaxBotsPerPlayer</code></td><td>1</td><td>Bot limit per player</td></tr>
+        <tr><td><code>AiBots.AutoSpawn</code></td><td>0</td><td>Auto-create a bot on login</td></tr>
+        <tr><td><code>AiBots.UpdateInterval</code></td><td>500</td><td>AI tick interval, ms</td></tr>
+        <tr><td><code>AiBots.WorldBots.Enable</code></td><td>1</td><td>Autonomous bots</td></tr>
+        <tr><td><code>AiBots.WorldBots.Count</code></td><td>10</td><td>Number of bots in the world</td></tr>
+        <tr><td><code>AiBots.WorldBots.SpawnMode</code></td><td>0</td><td>0 = SQL, 1 = near players, 2 = starting zones</td></tr>
+        <tr><td><code>AiBots.Tactics.FleeHealthPct</code></td><td>20</td><td>HP below threshold → flee</td></tr>
+        <tr><td><code>AiBots.Tactics.HealThresholdPct</code></td><td>50</td><td>HP below threshold → heal</td></tr>
+        <tr><td><code>AiBots.Guild.Enable</code></td><td>1</td><td>Bot guilds</td></tr>
+        <tr><td><code>AiBots.Siege.Enable</code></td><td>1</td><td>City sieges</td></tr>
+        <tr><td><code>AiBots.Pets.Enable</code></td><td>1</td><td>Bot pets</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>mod-ai-bots · Licensed under GPL-2.0 (same as AzerothCore)</p>
+      <p><a href="https://sourcecraft.dev/crazy-voin/mod-ai-bots">Repository on SourceCraft</a></p>
+    </div>
+  </footer>
+</div>
+
+<script>
+function setLang(lang) {
+  document.getElementById('lang-ru').hidden = lang !== 'ru';
+  document.getElementById('lang-en').hidden = lang !== 'en';
+  document.getElementById('btn-ru').classList.toggle('active', lang === 'ru');
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.documentElement.lang = lang;
+}
+</script>
+
+</body>
+</html>

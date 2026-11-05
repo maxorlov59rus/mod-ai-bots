@@ -139,6 +139,14 @@ cp modules/mod-ai-bots/conf/mod_ai_bots.conf.dist $HOME/ac-server/etc/mod_ai_bot
 | `.bot remove` (без имени) | Удалить всех своих ботов |
 | `.bot list` | Список своих ботов |
 | `.bot follow` | Вернуть ботов к следованию за вами |
+| `.bot gold` | Показать виртуальные кошельки ваших ботов (золото, собранное из лута) |
+| `.bot pet` | Призвать питомца ботам-охотникам/чернокнижникам |
+| `.bot shop` | Список товаров ближайшего бота-торговца (радиус 15 ярдов) |
+| `.bot buy <номер>` | Купить предмет у торговца по номеру из `.bot shop` |
+| `.bot groups` | Список активных групп автономных ботов с лидерами и составом |
+| `.bot territory` | Список территорий и их владельцев (Альянс/Орда) |
+| `.bot guild` | Информация о гильдиях ботов обеих фракций (уровень, XP, казна, состав) |
+| `.bot siege` | Статус осад городов и список целей |
 
 Расы: 1 = Human, 2 = Orc, 3 = Dwarf, 4 = Night Elf, 5 = Undead, 6 = Tauren, 7 = Gnome, 8 = Troll, 10 = Blood Elf, 11 = Draenei.
 
@@ -162,6 +170,32 @@ VALUES (0, -8913.0, 133.0, 87.0, 3.7, 'Моя локация');
 ```
 
 Используется при `AiBots.WorldBots.SpawnMode = 0`. Координаты можно взять в игре командой `.gps`. Подхватывается после рестарта.
+
+## Живой мир (дополнительные подсистемы)
+
+### Группы ботов (`AiBots.WorldBots.Groups.*`)
+Боты одной фракции рядом объединяются в группы: лидер координирует атаку, лекари лечат раненых товарищей. Просмотр активных групп — команда `.bot groups`.
+
+### Социализация и дуэли (`AiBots.WorldBots.Duels.*`)
+Боты приветствуют встречных ботов своей фракции и угрожают враждебным, с настраиваемым шансом устраивают короткие дуэли 1v1.
+
+### Боты-торговцы (`AiBots.Vendors.*`)
+Автономные боты-торговцы продают предметы игрокам за игровое золото. Список товаров — `.bot shop`, покупка — `.bot buy <номер>` (радиус 15 ярдов).
+
+### Территории (`AiBots.Territory.*`)
+Точки спавна «принадлежат» фракциям (таблица `mod_ai_bots_territory`) и периодически переходят из рук в руки с объявлением в мир. Список — `.bot territory`.
+
+### Гильдии ботов (`AiBots.Guild.*`)
+Отдельные гильдии для Альянса и Орды с прокачкой как в Cataclysm: уровни 1–25, XP за убийства ботов, казна и гильдейские перки (бонус XP, золота, скорости духа). Информация — `.bot guild`.
+
+### Осады городов (`AiBots.Siege.*`)
+Отряд ботов эпизодически штурмует вражескую столицу; защита — боты и NPC гарнизона. Осада завершается победой или отступлением по таймеру. Статус — `.bot siege`.
+
+### Питомцы ботов (`AiBots.Pets.*`)
+Охотники призывают зверей, чернокнижники — демонов. Питомцы следуют за ботом и сражаются с его целью. Ручной призыв — команда `.bot pet`.
+
+### Лут ботов
+Боты собирают золото с убитых мобов в виртуальный кошелёк. Оружие/броня экипируются, остальное «продаётся» в золото. Просмотр кошельков ботов игрока — `.bot gold`.
 
 ## Структура проекта
 
@@ -341,6 +375,14 @@ Edit the options to fit your server (see below).
 | `.bot remove` (no name) | Remove all of your bots |
 | `.bot list` | List your bots |
 | `.bot follow` | Make your bots follow you again |
+| `.bot gold` | Show the virtual wallets of your bots (gold collected from loot) |
+| `.bot pet` | Summon a pet for hunter/warlock bots |
+| `.bot shop` | List items of the nearest bot vendor (15 yards radius) |
+| `.bot buy <number>` | Buy an item from the vendor by number from `.bot shop` |
+| `.bot groups` | List active bot groups with leaders and members |
+| `.bot territory` | List territories and their owners (Alliance/Horde) |
+| `.bot guild` | Info about both faction bot guilds (level, XP, vault, members) |
+| `.bot siege` | City siege status and target list |
 
 Races: 1 = Human, 2 = Orc, 3 = Dwarf, 4 = Night Elf, 5 = Undead, 6 = Tauren, 7 = Gnome, 8 = Troll, 10 = Blood Elf, 11 = Draenei.
 
@@ -364,6 +406,32 @@ VALUES (0, -8913.0, 133.0, 87.0, 3.7, 'My location');
 ```
 
 Used when `AiBots.WorldBots.SpawnMode = 0`. Coordinates can be obtained in-game with `.gps`. Picked up after a restart.
+
+## Living world (additional subsystems)
+
+### Bot groups (`AiBots.WorldBots.Groups.*`)
+Nearby bots of the same faction form groups: the leader coordinates attacks, healers tend to wounded comrades. View active groups — `.bot groups`.
+
+### Social behavior and duels (`AiBots.WorldBots.Duels.*`)
+Bots greet friendly bots and threaten hostile ones, with a configurable chance to start short 1v1 duels.
+
+### Bot vendors (`AiBots.Vendors.*`)
+Autonomous vendor bots sell items to players for in-game gold. Item list — `.bot shop`, purchase — `.bot buy <number>` (15 yards radius).
+
+### Territories (`AiBots.Territory.*`)
+Spawn points "belong" to factions (the `mod_ai_bots_territory` table) and periodically change hands with a world announcement. List — `.bot territory`.
+
+### Bot guilds (`AiBots.Guild.*`)
+Separate guilds for Alliance and Horde with Cataclysm-style progression: levels 1–25, XP from bot kills, a vault and guild perks (XP, gold and spirit speed bonuses). Info — `.bot guild`.
+
+### City sieges (`AiBots.Siege.*`)
+A squad of bots periodically storms an enemy capital; defenders are bots and garrison NPCs. A siege ends in victory or a timed retreat. Status — `.bot siege`.
+
+### Bot pets (`AiBots.Pets.*`)
+Hunters summon beasts, warlocks summon demons. Pets follow their bot and fight its target. Manual summon — `.bot pet`.
+
+### Bot loot
+Bots collect gold from killed mobs into a virtual wallet. Weapons/armor are equipped, everything else is "sold" for gold. View player bot wallets — `.bot gold`.
 
 ## Project structure
 
