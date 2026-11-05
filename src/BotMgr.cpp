@@ -33,7 +33,14 @@
 namespace
 {
     std::string const BotSessionName = "AI-BOT";
-    uint32 const BotAccount = 0; // боты не привязаны к реальным аккаунтам
+    uint32 const BotAccountFallback = 0; // внутренняя заглушка, если AiBots.AccountId = 0
+
+    // Аккаунт ботов: из конфига или заглушка.
+    uint32 GetBotAccount()
+    {
+        uint32 id = AiBotsConfig::GetBotAccountId();
+        return id ? id : BotAccountFallback;
+    }
 
     bool IsValidRaceClass(uint8 race, uint8 cls)
     {
@@ -172,6 +179,9 @@ std::string BotMgr::GenerateUniqueBotName() const
     }
 
     // Режим 0 (или генератор не помог): числовой суффикс.
+    if (candidates.empty())
+        return AiBotsNameGen::Generate();
+
     std::string base = candidates[urand(0, candidates.size() - 1)];
     for (uint32 suffix = 2; suffix < 100; ++suffix)
     {
@@ -265,7 +275,7 @@ bool BotMgr::CreateBotForPlayer(Player* owner, uint8 race, uint8 cls)
     // Создаём запись персонажа в БД (упрощённо, минимальный набор полей).
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER);
     stmt->setUInt32(0, lowGuid);
-    stmt->setUInt32(1, BotAccount);
+    stmt->setUInt32(1, GetBotAccount());
     stmt->setString(2, name);
     stmt->setUInt8(3, race);
     stmt->setUInt8(4, cls);
@@ -278,8 +288,6 @@ bool BotMgr::CreateBotForPlayer(Player* owner, uint8 race, uint8 cls)
     stmt->setUInt8(11, facialFeature);
     stmt->setUInt8(12, tattoos);
 
-    CharacterDatabase.AsyncExecute(stmt);
-
     BotData data;
     data.guid = lowGuid;
     data.ownerGuid = ownerGuid;
@@ -291,11 +299,21 @@ bool BotMgr::CreateBotForPlayer(Player* owner, uint8 race, uint8 cls)
 
     _botsByOwner[ownerGuid].push_back(data);
     _allBots[lowGuid] = data;
+    _ownersLoaded.insert(ownerGuid);
 
     ChatHandler(owner->GetSession()).PSendSysMessage("[AI-Bot] Бот '{}' создан (раса {}, класс {}). Ожидание входа в мир...", name, race, cls);
 
-    // Откладываем вход в мир, чтобы запись успела записаться в БД.
-    ScheduleEnterWorld(lowGuid, ownerGuid);
+    // Записываем связь бот → владелец в world DB для восстановления после рестарта.
+    WorldDatabase.Execute(
+        "INSERT INTO `mod_ai_bots_owners` (`botGuid`, `ownerGuid`, `name`, `race`, `class`, `level`) VALUES ({}, {}, '{}', {}, {}, {})",
+        lowGuid, ownerGuid, name, race, cls, level);
+
+    // Вход в мир только после фактической записи персонажа в БД (иначе LoginQueryHolder
+    // может загрузить несуществующего персонажа при задержке БД).
+    CharacterDatabase.AsyncExecuteWithHolderAndCallback(stmt, [this, lowGuid, ownerGuid](QueryResult /*result*/)
+    {
+        ScheduleEnterWorld(lowGuid, ownerGuid);
+    });
 
     return true;
 }
@@ -328,25 +346,43 @@ void BotMgr::HandleBotLogin(ObjectGuid::LowType botGuid)
 
 bool BotMgr::EnterWorld(ObjectGuid::LowType botGuid, ObjectGuid::LowType ownerGuid)
 {
-    // Полноценная загрузка персонажа из БД асинхронным LoginQueryHolder
-    // выполняется в LoginPlayerHolder-пайплайне ядра; здесь мы просто
-    // инициируем вход через WorldSession-механизм ядра.
+    return EnterBotWorld(botGuid);
+}
+
+bool BotMgr::EnterBotWorld(ObjectGuid::LowType botGuid)
+{
     auto it = _allBots.find(botGuid);
     if (it == _allBots.end())
         return false;
 
-    Player* bot = ObjectAccessor::FindPlayer(ObjectGuid::Create<HighGuid::Player>(botGuid));
-    if (bot)
-        return true; // уже в мире
+    // Уже в мире.
+    if (ObjectAccessor::FindPlayer(ObjectGuid::Create<HighGuid::Player>(botGuid)))
+        return true;
 
-    // Запрос на загрузку персонажа из БД.
-    LoginQueryHolder* holder = new LoginQueryHolder(BotAccount, ObjectGuid::Create<HighGuid::Player>(botGuid));
-    if (!holder->Initialize())
+    uint32 accountId = GetBotAccount();
+    if (!accountId)
     {
-        delete holder;
+        LOG_ERROR("server.loading", ">> mod-ai-bots: AiBots.AccountId не задан — вход бота в мир невозможен (guid {}).", botGuid);
         return false;
     }
 
+    // Создаём сессию без сокета (как в playerbots) — бот будет числиться
+    // в онлайне: /who, счётчик сервера, characters.online.
+    WorldSession* session = new WorldSession(accountId, "", nullptr, SEC_PLAYER, 2, 0, LOCALE_enUS, 0, false, 0, 0);
+    session->SetBotSession(true);
+    sWorld->AddSession(session);
+
+    // Загрузка персонажа штатным пайплайном ядра.
+    LoginQueryHolder* holder = new LoginQueryHolder(accountId, ObjectGuid::Create<HighGuid::Player>(botGuid));
+    if (!holder->Initialize())
+    {
+        delete holder;
+        delete session;
+        return false;
+    }
+
+    session->SetBotSession(true);
+    holder->SetSession(session);
     CharacterDatabase.DelayQueryHolder(holder);
     return true;
 }
@@ -366,12 +402,45 @@ bool BotMgr::RemoveBot(Player* owner, std::string const& botName)
 
         ObjectGuid::LowType botGuid = it->guid;
 
+        // Сначала корректный логаут сессии (иначе characters.online останется = 1).
         if (Player* bot = ObjectAccessor::FindPlayer(ObjectGuid::Create<HighGuid::Player>(botGuid)))
-            bot->RemoveFromWorld();
+        {
+            if (WorldSession* session = bot->GetSession())
+                session->LogoutPlayer(true);
+        }
 
-        CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CHARACTER);
-        stmt->setUInt32(0, botGuid);
-        CharacterDatabase.AsyncExecute(stmt);
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+
+        // Полная очистка: персонаж и связанные данные (иначе мусор в БД).
+        constexpr CharacterDatabaseStatements charDeleteStatements[] =
+        {
+            CHAR_DEL_CHARACTER,
+            CHAR_DEL_CHARACTER_QUESTSTATUS,
+            CHAR_DEL_CHARACTER_INVENTORY,
+            CHAR_DEL_CHARACTER_SPELL,
+            CHAR_DEL_CHARACTER_SKILLS,
+            CHAR_DEL_CHARACTER_AURA,
+            CHAR_DEL_CHARACTER_REPUTATION,
+            CHAR_DEL_CHARACTER_ACTION,
+            CHAR_DEL_CHARACTER_HOME,
+        };
+        for (CharacterDatabaseStatements delStmt : charDeleteStatements)
+        {
+            if (auto* stmt = CharacterDatabase.GetPreparedStatement(delStmt))
+            {
+                stmt->setUInt32(0, botGuid);
+                trans->Append(stmt);
+            }
+        }
+
+        CharacterDatabase.CommitTransaction(trans);
+
+        // Связь бот → владелец живёт в таблице модуля (world DB) — чистим отдельным запросом.
+        WorldDatabase.Execute("DELETE FROM `mod_ai_bots_owners` WHERE `botGuid` = {}", botGuid);
+
+        // Сброс кеша персонажей, чтобы имя сразу стало свободным.
+        if (sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(botGuid)))
+            sCharacterCache->DeleteCharacterCacheEntry(ObjectGuid::Create<HighGuid::Player>(botGuid), it->name);
 
         _allBots.erase(botGuid);
         bots.erase(it);
@@ -410,8 +479,12 @@ void BotMgr::Update(uint32 diff)
     if (!AiBotsConfig::IsEnabled())
         return;
 
+    uint32 interval = AiBotsConfig::GetUpdateIntervalMs();
+    if (!interval)
+        return; // защита от деления/логики на нулевом интервале
+
     _updateTimer += diff;
-    if (_updateTimer < AiBotsConfig::GetUpdateIntervalMs())
+    if (_updateTimer < interval)
         return;
     _updateTimer = 0;
 
@@ -419,9 +492,9 @@ void BotMgr::Update(uint32 diff)
     for (auto it = _pendingLogins.begin(); it != _pendingLogins.end();)
     {
         PendingLogin& p = *it;
-        p.remainingMs -= AiBotsConfig::GetUpdateIntervalMs();
+        p.remainingMs -= interval;
 
-        if (p.remainingMs > AiBotsConfig::GetUpdateIntervalMs())
+        if (p.remainingMs > interval)
         {
             ++it;
             continue;
@@ -444,6 +517,12 @@ void BotMgr::Update(uint32 diff)
             for (auto const& data : it->second)
                 if (data.inWorld)
                     LogoutBot(data.guid);
+
+            // Чистим также глобальный реестр, чтобы он не рос бесконечно.
+            for (auto const& data : it->second)
+                _allBots.erase(data.guid);
+            _ownersLoaded.erase(ownerGuid);
+
             it = _botsByOwner.erase(it);
         }
         else
@@ -491,12 +570,62 @@ void BotMgr::HandlePlayerLogout(Player* player)
 
 void BotMgr::HandlePlayerLogin(Player* player)
 {
-    if (!player || !AiBotsConfig::IsEnabled() || !AiBotsConfig::IsAutoSpawnEnabled())
+    if (!player || !AiBotsConfig::IsEnabled())
+        return;
+
+    ObjectGuid::LowType ownerGuid = player->GetGUID().GetCounter();
+
+    // Восстанавливаем ботов из БД (после рестарта сервера связь терялась).
+    LoadOwnedBots(ownerGuid);
+
+    if (!AiBotsConfig::IsAutoSpawnEnabled())
         return;
 
     uint32 count = AiBotsConfig::GetBotsPerLogin();
     for (uint32 i = 0; i < count; ++i)
         CreateBotForPlayer(player);
+}
+
+void BotMgr::LoadOwnedBots(ObjectGuid::LowType ownerGuid)
+{
+    // Владелец онлайн, ботов нет в памяти: грузим привязки из БД (после рестарта
+    // сервера связь бот → владелец доступна только там). Повторно не грузим.
+    if (_botsByOwner.count(ownerGuid) || _ownersLoaded.count(ownerGuid))
+        return;
+
+    QueryResult result = WorldDatabase.Query(
+        "SELECT `botGuid`, `name`, `race`, `class`, `level` FROM `mod_ai_bots_owners` WHERE `ownerGuid` = {}", ownerGuid);
+    if (!result)
+        return;
+
+    _ownersLoaded.insert(ownerGuid);
+
+    do
+    {
+        Field* fields = result->Fetch();
+        BotData data;
+        data.guid = fields[0].Get<uint32>();
+        data.ownerGuid = ownerGuid;
+        data.name = fields[1].Get<std::string>();
+        data.race = fields[2].Get<uint8>();
+        data.cls = fields[3].Get<uint8>();
+        data.level = fields[4].Get<uint8>();
+        data.inWorld = false;
+
+        // Пропускаем битые записи (персонаж удалён вручную из characters).
+        if (!sCharacterCache->GetCharacterCacheByGuid(ObjectGuid::Create<HighGuid::Player>(data.guid)))
+        {
+            WorldDatabase.Execute("DELETE FROM `mod_ai_bots_owners` WHERE `botGuid` = {}", data.guid);
+            continue;
+        }
+
+        _botsByOwner[ownerGuid].push_back(data);
+        _allBots[data.guid] = data;
+    } while (result->NextRow());
+
+    if (!_botsByOwner[ownerGuid].empty())
+        LOG_INFO("server.loading", ">> mod-ai-bots: восстановлено {} ботов владельца {}.",
+            _botsByOwner[ownerGuid].size(), ownerGuid);
 }
 
 uint32 BotMgr::GetBotCountForPlayer(ObjectGuid::LowType ownerGuid) const

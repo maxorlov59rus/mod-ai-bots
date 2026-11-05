@@ -12,10 +12,12 @@
 
 #include <cstdint>
 #include <map>
+#include <set>
 #include <vector>
 
 class Player;
 class WorldSession;
+class LoginQueryHolder;
 
 struct BotData
 {
@@ -62,7 +64,18 @@ public:
     // При загрузке игрока в мир — автоспавн, если включён.
     void HandlePlayerLogin(Player* player);
 
+    // Восстановление ботов владельца из БД после рестарта сервера.
+    void LoadOwnedBots(ObjectGuid::LowType ownerGuid);
+
     uint32 GetBotCountForPlayer(ObjectGuid::LowType ownerGuid) const;
+
+    // Все боты (для социальных подсистем).
+    std::map<ObjectGuid::LowType, BotData> const& GetAllBots() const { return _allBots; }
+
+    // Вход бота в мир: создаёт WorldSession без сокета и грузит персонажа
+    // через штатный LoginQueryHolder-пайплайн ядра (бот появляется в /who,
+    // в онлайне сервера и characters.online = 1).
+    bool EnterBotWorld(ObjectGuid::LowType botGuid);
 
     // Уникальное имя бота: случайное из кеша (mod_ai_bots_names), не занятое
     // другими ботами/персонажами; при исчерпании — числовой суффикс.
@@ -84,6 +97,9 @@ private:
 
     std::map<ObjectGuid::LowType, std::vector<BotData>> _botsByOwner;
     std::map<ObjectGuid::LowType, BotData> _allBots;
+
+    // Guid владельцев, чьи боты уже восстановлены из БД (защита от повторной загрузки).
+    std::set<ObjectGuid::LowType> _ownersLoaded;
 
     struct PendingLogin
     {

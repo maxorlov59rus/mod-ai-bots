@@ -10,6 +10,7 @@
 namespace
 {
     bool        s_enabled       = false;
+    uint32      s_botAccountId  = 0;
     uint32      s_maxBots       = 1;
     bool        s_autoSpawn     = false;
     uint32      s_botsPerLogin  = 1;
@@ -38,6 +39,39 @@ namespace
 
     // Генерация имён
     uint8       s_namesMode         = 2;
+
+    // Живой мир
+    float       s_patrolRadius      = 25.0f;
+    bool        s_leveling          = true;
+    uint32      s_eliteChance       = 10;
+    bool        s_duels             = true;
+    uint32      s_duelChance        = 5;
+    bool        s_groups            = true;
+    uint32      s_groupMaxSize      = 5;
+    bool        s_vendors           = true;
+    uint32      s_vendorsCount      = 3;
+    bool        s_territory         = true;
+    uint32      s_territoryFlipMin  = 30;
+
+    // Гильдия
+    bool        s_guildEnabled      = true;
+    std::string s_guildAllianceName = "AI Vanguard";
+    std::string s_guildHordeName    = "AI Legion";
+    uint32      s_guildXpPerKill    = 5;
+    uint32      s_guildXpBase       = 1000;
+    uint32      s_guildMaxLevel     = 25;
+
+    // Осады
+    bool        s_siegeEnabled      = true;
+    uint32      s_siegeIntervalMin  = 90;
+    uint32      s_siegeIntervalMax  = 240;
+    uint32      s_siegeAttackerMin  = 5;
+    uint32      s_siegeAttackerMax  = 10;
+    uint32      s_siegeDurationMin  = 15;
+
+    // Питомцы
+    bool        s_petsEnabled       = true;
+    uint32      s_petsSummonSec     = 20;
 }
 
 namespace AiBotsConfig
@@ -45,6 +79,7 @@ namespace AiBotsConfig
     void Load()
     {
         s_enabled      = sConfigMgr->GetOption<bool>("AiBots.Enable", false);
+        s_botAccountId = sConfigMgr->GetOption<uint32>("AiBots.AccountId", 0);
         s_maxBots      = sConfigMgr->GetOption<uint32>("AiBots.MaxBotsPerPlayer", 1);
         s_autoSpawn    = sConfigMgr->GetOption<bool>("AiBots.AutoSpawn", false);
         s_botsPerLogin = sConfigMgr->GetOption<uint32>("AiBots.AutoSpawnCount", 1);
@@ -70,9 +105,39 @@ namespace AiBotsConfig
         s_useBuffs         = sConfigMgr->GetOption<bool>("AiBots.Tactics.UseBuffs", true);
 
         s_namesMode        = sConfigMgr->GetOption<uint8>("AiBots.Names.Mode", 2);
+
+        s_patrolRadius     = sConfigMgr->GetOption<float>("AiBots.WorldBots.Patrol.Radius", 25.0f);
+        s_leveling         = sConfigMgr->GetOption<bool>("AiBots.WorldBots.Leveling", true);
+        s_eliteChance      = sConfigMgr->GetOption<uint32>("AiBots.WorldBots.EliteChance", 10);
+        s_duels            = sConfigMgr->GetOption<bool>("AiBots.WorldBots.Duels.Enable", true);
+        s_duelChance       = sConfigMgr->GetOption<uint32>("AiBots.WorldBots.Duels.Chance", 5);
+        s_groups           = sConfigMgr->GetOption<bool>("AiBots.WorldBots.Groups.Enable", true);
+        s_groupMaxSize     = sConfigMgr->GetOption<uint32>("AiBots.WorldBots.Groups.MaxSize", 5);
+        s_vendors          = sConfigMgr->GetOption<bool>("AiBots.Vendors.Enable", true);
+        s_vendorsCount     = sConfigMgr->GetOption<uint32>("AiBots.Vendors.Count", 3);
+        s_territory        = sConfigMgr->GetOption<bool>("AiBots.Territory.Enable", true);
+        s_territoryFlipMin = sConfigMgr->GetOption<uint32>("AiBots.Territory.FlipMinutes", 30);
+
+        s_guildEnabled     = sConfigMgr->GetOption<bool>("AiBots.Guild.Enable", true);
+        s_guildAllianceName = sConfigMgr->GetOption<std::string>("AiBots.Guild.AllianceName", "AI Vanguard");
+        s_guildHordeName    = sConfigMgr->GetOption<std::string>("AiBots.Guild.HordeName", "AI Legion");
+        s_guildXpPerKill   = sConfigMgr->GetOption<uint32>("AiBots.Guild.XpPerKill", 5);
+        s_guildXpBase      = sConfigMgr->GetOption<uint32>("AiBots.Guild.XpPerLevelBase", 1000);
+        s_guildMaxLevel    = sConfigMgr->GetOption<uint32>("AiBots.Guild.MaxLevel", 25);
+
+        s_siegeEnabled     = sConfigMgr->GetOption<bool>("AiBots.Siege.Enable", true);
+        s_siegeIntervalMin = sConfigMgr->GetOption<uint32>("AiBots.Siege.IntervalMinMinutes", 90);
+        s_siegeIntervalMax = sConfigMgr->GetOption<uint32>("AiBots.Siege.IntervalMaxMinutes", 240);
+        s_siegeAttackerMin = sConfigMgr->GetOption<uint32>("AiBots.Siege.AttackerMin", 5);
+        s_siegeAttackerMax = sConfigMgr->GetOption<uint32>("AiBots.Siege.AttackerMax", 10);
+        s_siegeDurationMin = sConfigMgr->GetOption<uint32>("AiBots.Siege.DurationMinutes", 15);
+
+        s_petsEnabled      = sConfigMgr->GetOption<bool>("AiBots.Pets.Enable", true);
+        s_petsSummonSec    = sConfigMgr->GetOption<uint32>("AiBots.Pets.SummonIntervalSeconds", 20);
     }
 
     bool IsEnabled()                    { return s_enabled; }
+    uint32 GetBotAccountId()            { return s_botAccountId; }
     uint32 GetMaxBotsPerPlayer()        { return s_maxBots; }
     bool IsAutoSpawnEnabled()           { return s_autoSpawn; }
     uint32 GetBotsPerLogin()            { return s_botsPerLogin; }
@@ -98,4 +163,33 @@ namespace AiBotsConfig
     bool    IsBuffsEnabled()              { return s_useBuffs; }
 
     uint8   GetNamesMode()                { return s_namesMode; }
+
+    float   GetPatrolRadius()             { return s_patrolRadius; }
+    bool    IsLevelingEnabled()           { return s_leveling; }
+    uint32  GetEliteChance()              { return s_eliteChance; }
+    bool    IsDuelsEnabled()              { return s_duels; }
+    uint32  GetDuelChance()               { return s_duelChance; }
+    bool    IsGroupsEnabled()             { return s_groups; }
+    uint32  GetGroupMaxSize()             { return s_groupMaxSize; }
+    bool    IsVendorsEnabled()            { return s_vendors; }
+    uint32  GetVendorsCount()             { return s_vendorsCount; }
+    bool    IsTerritoryEnabled()          { return s_territory; }
+    uint32  GetTerritoryFlipMinutes()     { return s_territoryFlipMin; }
+
+    bool    IsGuildEnabled()              { return s_guildEnabled; }
+    std::string const& GetAllianceGuildName() { return s_guildAllianceName; }
+    std::string const& GetHordeGuildName()     { return s_guildHordeName; }
+    uint32  GetGuildXpPerKill()           { return s_guildXpPerKill; }
+    uint32  GetGuildXpPerLevelBase()      { return s_guildXpBase; }
+    uint32  GetGuildMaxLevel()            { return s_guildMaxLevel; }
+
+    bool    IsSiegeEnabled()              { return s_siegeEnabled; }
+    uint32  GetSiegeIntervalMin()         { return s_siegeIntervalMin; }
+    uint32  GetSiegeIntervalMax()         { return s_siegeIntervalMax; }
+    uint32  GetSiegeAttackerMin()         { return s_siegeAttackerMin; }
+    uint32  GetSiegeAttackerMax()         { return s_siegeAttackerMax; }
+    uint32  GetSiegeDurationMinutes()     { return s_siegeDurationMin; }
+
+    bool    IsPetsEnabled()               { return s_petsEnabled; }
+    uint32  GetPetsSummonInterval()       { return s_petsSummonSec; }
 }

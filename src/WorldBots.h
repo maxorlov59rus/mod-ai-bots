@@ -49,7 +49,9 @@ private:
     {
         ObjectGuid::LowType guid;
         bool alive;
+        bool enterTried;
         uint32 respawnTimerMs;
+        uint32 xpTimerMs;
     };
 
     std::vector<WorldBot> _bots;

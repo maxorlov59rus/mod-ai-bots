@@ -10,6 +10,10 @@
 #include "BotMgr.h"
 #include "BotSpells.h"
 #include "BotPersonality.h"
+#include "BotLoot.h"
+#include "BotSocial.h"
+#include "BotGroups.h"
+#include "BotGuild.h"
 #include "Config_Bots.h"
 
 #include "Cell.h"
@@ -34,11 +38,12 @@ namespace
     float const SearchPvPRange = 40.0f;     // радиус поиска PvP-целей
     uint32 const AttackCooldownMs = 2000;
     uint32 const ChatCheckIntervalMs = 10000;
+    uint32 const PatrolIntervalMs = 8000; // новая точка патруля раз в 8 сек
 }
 
 BotAI::BotAI(Player* bot)
     : _bot(bot), _owner(nullptr), _autonomous(false), _attackTimer(0), _chatTimer(0), _buffTimer(0), _fleeTimer(0)
-    , _inCombat(false), _fleeing(false), _teamId(TEAM_NEUTRAL)
+    , _patrolTimer(0), _spawnX(0.0f), _spawnY(0.0f), _inCombat(false), _fleeing(false), _lastTargetGuid(), _teamId(TEAM_NEUTRAL)
 {
     if (bot)
         _spells = AiBotsSpells::GetSpellsForClass(bot->getClass());
@@ -51,6 +56,15 @@ void BotAI::UpdateAI(uint32 diff)
 
     if (_autonomous)
     {
+        // Автономные боты тоже лечатся, баффуются и отступают при низком HP.
+        UpdateTactics(diff);
+
+        if (_fleeing)
+        {
+            UpdateFleeing(diff);
+            return;
+        }
+
         UpdateAutonomous(diff);
         return;
     }
@@ -113,6 +127,10 @@ void BotAI::UpdateAutonomous(uint32 diff)
         return;
     }
 
+    // Патрулирование, когда нет боя.
+    if (!_inCombat && !_fleeing && AiBotsConfig::GetPatrolRadius() > 0.0f)
+        UpdatePatrol(diff);
+
     bool combatStarted = false;
     Unit* target = FindTarget();
     if (!target)
@@ -128,14 +146,26 @@ void BotAI::UpdateAutonomous(uint32 diff)
         }
 
         _inCombat = true;
+        _lastTargetGuid = target->GetGUID();
         Attack(target);
     }
     else
     {
         if (_inCombat)
         {
-            // Бой окончен — фраза победы.
+            // Бой окончен — фраза победы, сбор добычи, XP гильдии.
+            // Цель берём по запомненному guid: GetVictim() уже сброшен ядром.
             _inCombat = false;
+            if (Unit* victim = ObjectAccessor::GetUnit(*_bot, _lastTargetGuid))
+            {
+                if (!victim->IsAlive())
+                {
+                    AiBotsLoot::CollectFrom(_bot, victim);
+                    AiBotsGuild::AwardKillXp(_bot, victim);
+                }
+            }
+            _lastTargetGuid.Clear();
+
             if (AiBotsConfig::IsWorldBotsChatEnabled() && roll_chance_i(AiBotsConfig::GetBattleCryChance()))
                 SayChat(AiBotsPersonality::GetForGuid(_bot->GetGUID().GetCounter()).victory);
         }
@@ -143,6 +173,31 @@ void BotAI::UpdateAutonomous(uint32 diff)
     }
 
     UpdateChat(diff, _inCombat || combatStarted);
+}
+
+// ---------- Патрулирование ----------
+
+void BotAI::UpdatePatrol(uint32 diff)
+{
+    _patrolTimer += diff;
+    if (_patrolTimer < PatrolIntervalMs)
+        return;
+    _patrolTimer = 0;
+
+    float radius = AiBotsConfig::GetPatrolRadius();
+    float angle = frand(0.0f, 2.0f * float(M_PI));
+    float dist = frand(radius * 0.3f, radius);
+    float x = _spawnX + dist * std::cos(angle);
+    float y = _spawnY + dist * std::sin(angle);
+    float z = _bot->GetPositionZ();
+
+    _bot->GetMotionMaster()->MovePoint(1, x, y, z);
+}
+
+void BotAI::RememberSpawn()
+{
+    _spawnX = _bot->GetPositionX();
+    _spawnY = _bot->GetPositionY();
 }
 
 Unit* BotAI::FindTarget()
@@ -188,6 +243,19 @@ Unit* BotAI::FindPvPTarget()
     for (Player* player : targets)
     {
         if (!player->IsAlive() || player == _bot)
+            continue;
+
+        // Атакуем только других ботов, а не реальных игроков.
+        bool isBot = false;
+        for (auto const& pair : sBotMgr->GetAllBots())
+        {
+            if (pair.first == player->GetGUID().GetCounter())
+            {
+                isBot = true;
+                break;
+            }
+        }
+        if (!isBot)
             continue;
 
         // Боты-игроки без владельца, враждебные по фракции.
@@ -259,12 +327,12 @@ void BotAI::SayChat(std::vector<std::string> const& phrases, bool yell)
         return;
 
     std::string const& phrase = phrases[urand(0, phrases.size() - 1)];
-    ChatHandler(_bot->GetSession()).PSendSysMessage("%s", phrase.c_str()); // fallback для отладки в консоль
 
-    // Say / Yell в мир — видно другим игрокам вокруг.
-    _bot->Say(phrase, LANG_UNIVERSAL);
+    // Say или Yell — но не оба сразу, чтобы игроки не видели реплику дважды.
     if (yell)
         _bot->Yell(phrase, LANG_UNIVERSAL);
+    else
+        _bot->Say(phrase, LANG_UNIVERSAL);
 }
 
 // ---------- Тактика: лечение, баффы, отступление ----------
@@ -421,11 +489,15 @@ void BotAI::Attack(Unit* target)
     _bot->SetSelection(target->GetGUID());
 
     float dist = _bot->GetDistance(target);
-    if (dist > MaxAttackRange)
-        _bot->GetMotionMaster()->MoveChase(target, std::min(MaxAttackRange, MaxSpellRange) - 1.0f);
+    bool hasRangedSpells = AiBotsConfig::IsWorldBotsSpellsEnabled() && !_spells.empty();
+
+    // Кастерам с рэнж-спеллами выгоднее держать дистанцию каста, melee — 5 ярдов.
+    float chaseRange = hasRangedSpells ? MaxSpellRange - 2.0f : MaxAttackRange - 1.0f;
+    if (dist > chaseRange)
+        _bot->GetMotionMaster()->MoveChase(target, chaseRange);
 
     // Спеллы по классу, если включены.
-    if (AiBotsConfig::IsWorldBotsSpellsEnabled() && dist <= MaxSpellRange)
+    if (hasRangedSpells && dist <= MaxSpellRange)
     {
         if (CastRandomSpell(target))
             return;
@@ -440,4 +512,5 @@ void BotAI::StopAttack()
 {
     _bot->AttackStop();
     _bot->GetMotionMaster()->Clear();
+    _lastTargetGuid.Clear();
 }

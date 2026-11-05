@@ -83,3 +83,97 @@ INSERT INTO `mod_ai_bots_locations` (`mapId`, `x`, `y`, `z`, `o`, `comment`) VAL
   (1,  -4378.0, -3267.0, 34.0, 2.7, 'Mulgore (Bloodhoof Village)'),
   (1,  -2244.0, -407.0, -9.0, 4.7, 'Mulgore (Thunder Bluff road)'),
   (1,  9657.0,  952.0, 1290.0, 5.0, 'Ghostlands');
+
+-- Товары ботов-торговцев (фича .bot shop / .bot buy).
+-- botName должно совпадать с именем существующего бота.
+-- stock: 0 = бесконечный запас.
+DROP TABLE IF EXISTS `mod_ai_bots_vendors`;
+CREATE TABLE `mod_ai_bots_vendors` (
+  `id`      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `botName` VARCHAR(12) NOT NULL,
+  `itemId`  INT UNSIGNED NOT NULL,
+  `price`   INT UNSIGNED NOT NULL DEFAULT 100,
+  `stock`   INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_botname` (`botName`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Товары ботов-торговцев (mod-ai-bots)';
+
+INSERT INTO `mod_ai_bots_vendors` (`botName`, `itemId`, `price`, `stock`) VALUES
+  ('Botwarrior', 6948,  100, 0),   -- Hearth Stone
+  ('Botmage',    118,   800, 0),   -- Minor Mana Potion
+  ('Botmage',    858,   400, 0),   -- Minor Healing Stone
+  ('Botpriest',  17032, 2000, 0);  -- Heavy Runecloth Bandage
+
+-- Территории фракций (фича смены владельца зон).
+-- owner: 0 = Alliance, 1 = Horde.
+DROP TABLE IF EXISTS `mod_ai_bots_territory`;
+CREATE TABLE `mod_ai_bots_territory` (
+  `id`    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `name`  VARCHAR(64) NOT NULL,
+  `owner` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Территории фракций (mod-ai-bots)';
+
+INSERT INTO `mod_ai_bots_territory` (`name`, `owner`) VALUES
+  ('Elwynn Forest', 0),
+  ('Dun Morogh', 0),
+  ('Stormwind', 0),
+  ('Westfall', 0),
+  ('Duskwood', 0),
+  ('Durotar', 1),
+  ('Mulgore', 1),
+  ('Orgrimmar', 1),
+  ('Northern Barrens', 1),
+  ('Ashenvale', 0),
+  ('Hillsbrad Foothills', 1),
+  ('Arathi Highlands', 0);
+
+-- Гильдия ботов: прокачка как в Cataclysm (уровни 1-25 + перки).
+-- id всегда 1 (одна гильдия), level/xp/vault восстанавливаются при старте.
+DROP TABLE IF EXISTS `mod_ai_bots_guild`;
+CREATE TABLE `mod_ai_bots_guild` (
+  `id`    INT UNSIGNED NOT NULL,
+  `level` INT UNSIGNED NOT NULL DEFAULT 1,
+  `xp`    INT UNSIGNED NOT NULL DEFAULT 0,
+  `vault` INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Уровень гильдии ботов (mod-ai-bots)';
+
+INSERT INTO `mod_ai_bots_guild` (`id`, `level`, `xp`, `vault`) VALUES (1, 1, 0, 0);
+
+-- Привязки бот → владелец (персистентность ботов игроков после рестарта сервера).
+-- Заполняется автоматически при создании бота; заполнять вручную не требуется.
+DROP TABLE IF EXISTS `mod_ai_bots_owners`;
+CREATE TABLE `mod_ai_bots_owners` (
+  `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `botGuid`  INT UNSIGNED NOT NULL,
+  `ownerGuid` INT UNSIGNED NOT NULL,
+  `name`     VARCHAR(12) NOT NULL,
+  `race`     TINYINT UNSIGNED NOT NULL,
+  `class`    TINYINT UNSIGNED NOT NULL,
+  `level`    TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_botguid` (`botGuid`),
+  KEY `idx_ownerguid` (`ownerGuid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Владельцы AI-ботов (mod-ai-bots)';
+
+-- Цели осад (фича осад городов).
+-- faction: 0 = Alliance (город альянса), 1 = Horde.
+-- Атакует фракция противоположная faction. Цели можно менять без пересборки.
+DROP TABLE IF EXISTS `mod_ai_bots_siege_targets`;
+CREATE TABLE `mod_ai_bots_siege_targets` (
+  `id`      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `mapId`   SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `x`       FLOAT NOT NULL,
+  `y`       FLOAT NOT NULL,
+  `z`       FLOAT NOT NULL,
+  `name`    VARCHAR(64) NOT NULL,
+  `faction` TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Цели осад городов (mod-ai-bots)';
+
+INSERT INTO `mod_ai_bots_siege_targets` (`mapId`, `x`, `y`, `z`, `name`, `faction`) VALUES
+  (0, -9050.0,   440.0, 94.0, 'Stormwind', 0),
+  (0, -4981.0,  -881.0, 501.0, 'Ironforge', 0),
+  (1,  1568.0, -4297.0, 61.0, 'Orgrimmar', 1),
+  (1,  1831.0,   238.0, 61.0, 'Undercity', 1);

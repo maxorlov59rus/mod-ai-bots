@@ -10,6 +10,7 @@
 #include "BotAI.h"
 #include "BotMgr.h"
 #include "BotGear.h"
+#include "BotGuild.h"
 #include "Config_Bots.h"
 
 #include "Chat.h"
@@ -53,7 +54,9 @@ namespace
     };
 
     std::string const WorldBotSessionName = "AI-WORLDBOT";
-    uint32 const WorldBotAccount = 1;
+
+    // Аккаунт автономных ботов — тот же, что в BotMgr (из конфига).
+    uint32 const WorldBotAccount = 0; // заглушка; реальный id берётся через AiBotsConfig::GetBotAccountId()
 }
 
 WorldBots* WorldBots::instance()
@@ -87,13 +90,18 @@ bool WorldBots::SpawnOne()
 
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_CHARACTER);
     stmt->setUInt32(0, lowGuid);
-    stmt->setUInt32(1, WorldBotAccount);
+    stmt->setUInt32(1, AiBotsConfig::GetBotAccountId()); // аккаунт ботов из конфига
     stmt->setString(2, name);
     stmt->setUInt8(3, race);
     stmt->setUInt8(4, cls);
     stmt->setUInt8(5, urand(0, 1)); // gender
 
+    // Элитный бот: повышенный уровень (шанс из конфига).
     uint8 level = static_cast<uint8>(std::min<uint32>(AiBotsConfig::GetWorldBotLevel(), 80));
+    bool elite = roll_chance_i(AiBotsConfig::GetEliteChance());
+    if (elite)
+        level = static_cast<uint8>(std::min<uint32>(level + 10, 80));
+
     stmt->setUInt8(6, level);
 
     // Случайная внешность: у каждого автономного бота свой облик.
@@ -106,9 +114,11 @@ bool WorldBots::SpawnOne()
     stmt->setUInt8(11, facialFeature);
     stmt->setUInt8(12, tattoos);
 
-    CharacterDatabase.AsyncExecute(stmt);
+    // Синхронный INSERT: персонаж обязан существовать в БД до первого входа в мир.
+    // (Update инициирует вход только при первом тике — к этому моменту запись уже видна.)
+    CharacterDatabase.DirectExecute(stmt);
 
-    _bots.push_back({ lowGuid, false, 0 });
+    _bots.push_back({ lowGuid, false, false, 0, 0 });
     return true;
 }
 
@@ -184,8 +194,36 @@ void WorldBots::Update(uint32 diff)
     {
         Player* player = ObjectAccessor::FindPlayer(ObjectGuid::Create<HighGuid::Player>(bot.guid));
 
+        // Бот ещё не в мире — инициируем вход через сессию без сокета.
         if (!player)
+        {
+            if (bot.enterTried)
+                continue;
+
+            bot.enterTried = true;
+            sBotMgr->EnterBotWorld(bot.guid);
             continue;
+        }
+
+        // Прокачка: опыт со временем (если включена). С бонусом перка Fast Track.
+        if (AiBotsConfig::IsLevelingEnabled() && player->IsAlive() && player->GetLevel() < 80)
+        {
+            // Бонус XP от уровня гильдии ускоряет персональную прокачку.
+            uint32 intervalMs = (5 * 60 * 1000 * 100) / AiBotsGuild::GetXpBonusPct();
+            bot.xpTimerMs += AiBotsConfig::GetUpdateIntervalMs();
+
+            if (bot.xpTimerMs >= intervalMs)
+            {
+                bot.xpTimerMs = 0;
+                player->GiveLevel(player->GetLevel() + 1);
+                AiBotsGuild::AwardLevelXp(player);
+                LOG_DEBUG("server.loading", ">> mod-ai-bots: автономный бот {} достиг уровня {}.",
+                    bot.guid, player->GetLevel());
+            }
+        }
+
+        // Вступление в гильдию ботов.
+        AiBotsGuild::AddMember(player);
 
         if (!player->IsAlive())
         {

@@ -10,6 +10,7 @@
 #define AI_BOTS_BOT_AI_H
 
 #include "Define.h"
+#include "ObjectGuid.h"
 #include "SharedDefines.h"
 
 #include <cstdint>
@@ -30,7 +31,7 @@ public:
     void SetOwner(Player* owner) { _owner = owner; }
 
     // Автономный режим: сам ищет мобов и врагов, использует спеллы, общается.
-    void SetAutonomous(bool enabled) { _autonomous = enabled; }
+    void SetAutonomous(bool enabled) { _autonomous = enabled; if (enabled && _bot) RememberSpawn(); }
     bool IsAutonomous() const { return _autonomous; }
 
 private:
@@ -53,6 +54,10 @@ private:
     void StartFleeing(Unit* from);
     void UpdateFleeing(uint32 diff);
 
+    // Патрулирование вокруг точки спавна
+    void UpdatePatrol(uint32 diff);
+    void RememberSpawn();
+
     void Attack(Unit* target);
     void StopAttack();
 
@@ -63,8 +68,13 @@ private:
     uint32 _chatTimer;
     uint32 _buffTimer;
     uint32 _fleeTimer;
+    uint32 _patrolTimer;
+    float _spawnX;
+    float _spawnY;
     bool _inCombat;
     bool _fleeing;
+    // Последняя цель бота: требуется после боя, когда ядро уже сбросило GetVictim().
+    ObjectGuid _lastTargetGuid;
     TeamId _teamId;
     std::vector<uint32> _spells;
 };

@@ -4,6 +4,9 @@
 
 CollectSourceFiles(${CMAKE_CURRENT_SOURCE_DIR} PRIVATE_SOURCES)
 
+# В список исходников попадали conf/, data/ и README — оставляем только код.
+list(FILTER PRIVATE_SOURCES INCLUDE REGEX "\\.(cpp|h)$")
+
 add_library(mod-ai-bots STATIC ${PRIVATE_SOURCES})
 
 CollectIncludeDirectories(${CMAKE_CURRENT_SOURCE_DIR} PUBLIC_INCLUDES)

@@ -19,6 +19,7 @@ namespace AiBotsConfig
     void Load();
 
     bool    IsEnabled();            // AiBots.Enable
+    uint32  GetBotAccountId();      // AiBots.AccountId
     uint32  GetMaxBotsPerPlayer();  // AiBots.MaxBotsPerPlayer
     bool    IsAutoSpawnEnabled();   // AiBots.AutoSpawn
     uint32  GetBotsPerLogin();      // AiBots.AutoSpawnCount
@@ -47,6 +48,39 @@ namespace AiBotsConfig
 
     // Генерация имён
     uint8   GetNamesMode();             // AiBots.Names.Mode: 0=таблица, 1=генератор, 2=смешанный
+
+    // Живой мир (AiBots.WorldBots.*)
+    float   GetPatrolRadius();          // AiBots.WorldBots.Patrol.Radius
+    bool    IsLevelingEnabled();        // AiBots.WorldBots.Leveling
+    uint32  GetEliteChance();           // AiBots.WorldBots.EliteChance
+    bool    IsDuelsEnabled();           // AiBots.WorldBots.Duels.Enable
+    uint32  GetDuelChance();            // AiBots.WorldBots.Duels.Chance
+    bool    IsGroupsEnabled();          // AiBots.WorldBots.Groups.Enable
+    uint32  GetGroupMaxSize();          // AiBots.WorldBots.Groups.MaxSize
+    bool    IsVendorsEnabled();         // AiBots.Vendors.Enable
+    uint32  GetVendorsCount();          // AiBots.Vendors.Count
+    bool    IsTerritoryEnabled();       // AiBots.Territory.Enable
+    uint32  GetTerritoryFlipMinutes();  // AiBots.Territory.FlipMinutes
+
+    // Гильдия ботов (AiBots.Guild.*) — отдельная для каждой фракции
+    bool    IsGuildEnabled();           // AiBots.Guild.Enable
+    std::string const& GetAllianceGuildName(); // AiBots.Guild.AllianceName
+    std::string const& GetHordeGuildName();    // AiBots.Guild.HordeName
+    uint32  GetGuildXpPerKill();        // AiBots.Guild.XpPerKill
+    uint32  GetGuildXpPerLevelBase();   // AiBots.Guild.XpPerLevelBase
+    uint32  GetGuildMaxLevel();         // AiBots.Guild.MaxLevel
+
+    // Осады (AiBots.Siege.*)
+    bool    IsSiegeEnabled();           // AiBots.Siege.Enable
+    uint32  GetSiegeIntervalMin();      // AiBots.Siege.IntervalMinMinutes
+    uint32  GetSiegeIntervalMax();      // AiBots.Siege.IntervalMaxMinutes
+    uint32  GetSiegeAttackerMin();      // AiBots.Siege.AttackerMin
+    uint32  GetSiegeAttackerMax();      // AiBots.Siege.AttackerMax
+    uint32  GetSiegeDurationMinutes();  // AiBots.Siege.DurationMinutes
+
+    // Питомцы (AiBots.Pets.*)
+    bool    IsPetsEnabled();            // AiBots.Pets.Enable
+    uint32  GetPetsSummonInterval();    // AiBots.Pets.SummonIntervalSeconds
 }
 
 #endif // AI_BOTS_CONFIG_BOTS_H

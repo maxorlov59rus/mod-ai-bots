@@ -1,305 +1,405 @@
-# Social Network (Социальная Сеть)
+# mod-ai-bots
 
-**Язык / Language:** [Русский](#команды) | [English](#commands)
+**[Русский](#русский) | [English](#english)**
 
-Fun-модуль для AzerothCore: внутреигровая социальная сеть — профили игроков, стена записей, лайки, комментарии, личные сообщения, подписки, топ по лайкам и **NPC-терминал с меню в клиенте**.
+---
+
+<a id="русский"></a>
+
+Модуль AI-ботов для [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) (3.3.5a).
+
+Боты — это полноценные персонажи-игроки, которые живут на сервере: следуют за владельцем, сражаются с мобами, дерутся между собой (Альянс ↔ Орда), используют заклинания по классу, лечатся, баффуются, отступают при низком здоровье и общаются в чате — у каждого бота свой характер, внешность и экипировка.
+
+## Возможности
+
+### Боты игрока
+- Команды `.bot add / remove / list / follow` (доступны всем игрокам);
+- Бот следует за владельцем и участвует в бою рядом с ним;
+- Автоспавн при входе игрока в мир (опционально);
+- Уровень бота может синхронизироваться с уровнем владельца.
+
+### Автономные боты в мире
+- Спавнятся сами при старте сервера в локациях (3 режима выбора точек);
+- Сами находят и атакуют мобов поблизости;
+- PvP: атакуют ботов враждебной фракции;
+- Используют заклинания своего класса;
+- Лечатся и баффуются;
+- Отступают при низком HP;
+- Респавн после смерти через настраиваемое время;
+- Пишут в чат на английском (Say/Yell).
+
+### Индивидуальность ботов
+- **Личности**: 5 характеров (Aggressive, Calm, Jester, Grump, Hero) — у каждого свои реплики для боя, побед, idle, отступления и лечения. Характер закреплён за ботом навсегда (по guid);
+- **Внешность**: случайные skin, face, причёска, цвет волос, борода/усы при создании;
+- **Экипировка**: наборы брони plate / mail / leather / cloth и оружие по классу, надеваются автоматически при входе в мир;
+- **Уникальные имена**: из SQL-таблицы, процедурный слоговый генератор (~21 000 комбинаций) или смешанный режим.
+
+## Установка
+
+### 1. Клонирование модуля
+
+```bash
+cd azerothcore-wotlk/modules
+git clone <url-репозитория> mod-ai-bots
+```
+
+### 2. Сборка
+
+Модуль подхватывается стандартным механизмом AC-modules при обычной пересборке ядра:
+
+```bash
+cd azerothcore-wotlk
+mkdir build && cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ac-server
+make -j$(nproc)
+make install
+```
+
+### 3. Применение SQL
+
+Выполните скрипт в базу **world**:
+
+```bash
+mysql -u root -p acore_world < modules/mod-ai-bots/data/sql/db-world/mod_ai_bots.sql
+```
+
+Скрипт создаёт таблицы:
+- `mod_ai_bots_names` — имена ботов;
+- `mod_ai_bots_locations` — точки спавна автономных ботов;
+- `mod_ai_bots_settings` — справочные настройки.
+
+> Если скрипт уже применялся ранее и вы обновляете модуль — удалите старые данные таблиц перед повторным применением INSERT-блоков.
+
+### 4. Конфигурация
+
+Скопируйте конфиг в папку сервера:
+
+```bash
+cp modules/mod-ai-bots/conf/mod_ai_bots.conf.dist $HOME/ac-server/etc/mod_ai_bots.conf
+```
+
+��тредактируйте параметры под ваш сервер (см. ниже).
+
+## Настройка (mod_ai_bots.conf)
+
+### Основное
+
+| Опция | По умолчанию | Описание |
+|---|---|---|
+| `AiBots.Enable` | 0 | Включение модуля |
+| `AiBots.MaxBotsPerPlayer` | 1 | Лимит ботов на игрока |
+| `AiBots.AutoSpawn` | 0 | Автосоздание бота при логине |
+| `AiBots.AutoSpawnCount` | 1 | Сколько ботов создавать при логине |
+| `AiBots.UpdateInterval` | 500 | Интервал тика AI, мс |
+| `AiBots.EnableCombat` | 1 | Разрешить ботам бой |
+| `AiBots.FollowDistance` | 4.0 | Дистанция следования, ярды |
+| `AiBots.CommandsForAll` | 1 | Команды доступны всем игрокам |
+| `AiBots.DefaultRaceClass` | "1:1" | Раса:класс бота по умолчанию |
+
+### Автономные боты (`AiBots.WorldBots.*`)
+
+| Опция | По умолчанию | Описание |
+|---|---|---|
+| `Enable` | 1 | Включить автономных ботов |
+| `Count` | 10 | Количество ботов в мире |
+| `SpawnMode` | 0 | 0 = SQL-таблица, 1 = рядом с онлайн-игроками, 2 = случайные стартовые зоны |
+| `RespawnSeconds` | 60 | Респавн после смерти, сек |
+| `Level` | 5 | Стартовый уровень автономных ботов |
+| `UseSpells` | 1 | Использовать заклинания по классу |
+
+### Чат ботов (`AiBots.WorldBots.Chat.*`)
+
+| Опция | По умолчанию | Описание |
+|---|---|---|
+| `Enable` | 1 | Разрешить ботам писать в чат |
+| `BattleCryChance` | 30 | Шанс боевого клича, % |
+| `IdleChance` | 2 | Шанс idle-фразы (раз в 10 сек), % |
+
+### Тактика (`AiBots.Tactics.*`)
+
+| Опция | По умолчанию | Описание |
+|---|---|---|
+| `FleeHealthPct` | 20 | HP < этого значения → отступление (0 = выкл) |
+| `HealThresholdPct` | 50 | HP < этого значения → лечение (0 = выкл) |
+| `UseBuffs` | 1 | Баффать себя и союзников перед боем |
+
+### Прочее
+
+| Опция | По умолчанию | Описание |
+|---|---|---|
+| `AiBots.SyncOwnerLevel` | 0 | > 0: уровень бота игрока = уровень владельца |
+| `AiBots.Names.Mode` | 2 | 0 = SQL-таблица, 1 = генератор, 2 = смешанный |
 
 ## Команды
 
 | Команда | Описание |
 |---|---|
-| `.social profile [имя]` | Профиль: уровень, время в игре, гильдия, статус, лайки, подписчики/подписки. |
-| `.social status <текст>` | Установить статус в профиле. |
-| `.social post <текст>` | Опубликовать запись на своей стене (подписчики онлайн получают уведомление). |
-| `.social wall [имя]` | Последние записи со стены (своей или чужой). |
-| `.social delete <id>` | Удалить свою запись (и её лайки/комментарии). |
-| `.social like <имя>` | Лайкнуть последнюю запись игрока (1 раз на запись, нельзя себе). |
-| `.social comment <id> <текст>` | Оставить комментарий к записи. |
-| `.social comments <id>` | Прочитать комментарии записи. |
-| `.social msg <имя> <текст>` | Личное сообщение игроку (доставляется сразу, если он онлайн). |
-| `.social inbox` | Входящие сообщения. |
-| `.social msgdel <id>` | Удалить сообщение из входящих. |
-| `.social follow <имя>` | Подписаться на игрока. |
-| `.social unfollow <имя>` | Отписаться от игрока. |
-| `.social friend <имя>` | Заявка в друзья (взаимная: принимающий видит уведомление). |
-| `.social friendaccept <имя>` | Принять заявку в друзья (дружба появляется у обоих). |
-| `.social frienddecline <имя>` | Отклонить заявку. |
-| `.social friends` | Список друзей. |
-| `.social requests` | Входящие заявки в друзья (кто вас пригласил). |
-| `.social frienddel <имя>` | Удалить из друзей (у обоих). |
-| `.social enemy <имя>` | Добавить во враги (нельзя друга; лимит 10). |
-| `.social enemies` | Список врагов. |
-| `.social enemydel <имя>` | Убрать из врагов. |
-| `.social guild` | Карточка вашей гильдии: гилдмастер, число участников, список и онлайн. |
-| `.social top` | Топ-10 игроков по лайкам. |
-| `.social deleteany <id>` | Удалить любую запись (только для RBAC 1101 — модерация). |
+| `.bot add [race:class]` | Создать бота (например `.bot add 7:8` — гном-маг) |
+| `.bot remove <имя>` | Удалить бота по имени |
+| `.bot remove` (без имени) | Удалить всех своих ботов |
+| `.bot list` | Список своих ботов |
+| `.bot follow` | Вернуть ботов к следованию за вами |
 
-## NPC-терминал (интерфейс в клиенте)
+Расы: 1 = Human, 2 = Orc, 3 = Dwarf, 4 = Night Elf, 5 = Undead, 6 = Tauren, 7 = Gnome, 8 = Troll, 10 = Blood Elf, 11 = Draenei.
 
-В мире стоит **Социальная Сеть — терминал общения** (NPC 911100, Stormwind у Аукционного Дома). Клик по нему открывает **gossip-меню в клиенте**:
+Классы: 1 = Warrior, 2 = Paladin, 3 = Hunter, 4 = Rogue, 5 = Priest, 7 = Shaman, 8 = Mage, 9 = Warlock, 11 = Druid.
 
-- **Мой профиль** — сводка профиля.
-- **Моя стена** — последние записи.
-- **Входящие** — личные сообщения.
-- **Топ по лайкам**.
-- **Подсказка** — список команд.
+## Расширение через БД
 
-Меню локализовано (RU/EN по клиенту игрока). Посты/комментарии/сообщения вводятся через чат-команды — штатное окно ввода gossip (player-choice box) в AzerothCore-модулях не переносимо, поэтому записи пишутся так: открыли терминал → «Подсказка» → `.social post Привет!`.
+### Имена ботов (`mod_ai_bots_names`)
 
-Позицию NPC можно изменить в `data/sql/db-world/social_network_world.sql` (или командой `.npc move`).
+```sql
+INSERT INTO mod_ai_bots_names (name) VALUES ('МоёИмя');
+```
 
-## Аддон-компаньон (интерфейс в клиенте)
+Подхватывается после рестарта сервера. Работает в режимах имён 0 и 2.
 
-Репозиторий включает **аддон `addon/SocialNetwork/`** — окно Социальной Сети внутри клиента 3.3.5:
+### Точки спавна (`mod_ai_bots_locations`)
 
-- Кнопки: **Профиль / Стена / Входящие / Топ** — просмотр без команд.
-- **Поле ввода + «Отправить»** — публикация записи на стену прямо из окна.
-- Слэш-команды: `/socn` (открыть окно), `/socn wall <имя>` (быстрый запрос в чат), также работает `/соцсеть`.
-- Полная локализация интерфейса (RU/EN через TOC-метаданные).
+```sql
+INSERT INTO mod_ai_bots_locations (mapId, x, y, z, o, comment)
+VALUES (0, -8913.0, 133.0, 87.0, 3.7, 'Моя локация');
+```
 
-### Как работает
+Используется при `AiBots.WorldBots.SpawnMode = 0`. Координаты можно взять в игре командой `.gps`. Подхватывается после рестарта.
 
-Аддон общается с сервером через **штатный addon-канал ядра AzerothCore** (`AddonChannelCommandHandler`, протокол `AzerothCore	`), поэтому **правки ядра не нужны** — сервер лишь должен иметь модуль `mod-social-network` с командами `.social ...`.
+## Структура проекта
 
-### Установка аддона
+```
+mod-ai-bots/
+├── CMakeLists.txt                  # сборка (AC-modules)
+├── conf/
+│   └── mod_ai_bots.conf.dist       # конфигурация
+├── data/sql/db-world/
+│   └── mod_ai_bots.sql             # таблицы world DB
+└── src/
+    ├── AiBotsScripts.cpp           # команды .bot, хуки, тикер
+    ├── BotMgr.h/.cpp               # менеджер ботов (создание, вход в мир, удаление)
+    ├── BotAI.h/.cpp                # поведение: следование, бой, спеллы, тактика, чат
+    ├── WorldBots.h/.cpp            # автономные боты: спавн, респавн
+    ├── BotSpells.h/.cpp            # способности и баффы по классам
+    ├── BotPersonality.h/.cpp       # личности и реплики
+    ├── BotGear.h/.cpp              # внешность и экипировка
+    ├── BotNameGen.h/.cpp           # генератор имён
+    ├── Config_Bots.h/.cpp          # чтение конфига
+    └── Loader/Loader.h             # точка загрузки скриптов
+```
 
-1. Скопируйте папку `addon/SocialNetwork` в клиент: `Interface/AddOns/SocialNetwork`.
-2. Перезапустите клиент, включите аддон на экране выбора персонажа.
-3. Откройте окно: `/socn` или `/соцсеть` (либо через NPC-терминал).
+## Как это работает
 
-## Смайлики
+1. **Создание бота** — модуль вставляет запись персонажа в базу `characters` (со случайной внешностью), затем через несколько секунд бот входит в мир через штатный механизм загрузки игроков;
+2. **Поведение** — тикер `WorldScript::OnUpdate` каждые `AiBots.UpdateInterval` мс обновляет AI ботов: следование, поиск целей (мобы 30 ярдов, враждебные боты 40 ярдов), атака (спелл → автоатака), лечение/баффы/отступление;
+3. **Чат** — реплики выбираются из личности бота (детерминированной по guid) и произносятся через Say/Yell — их видят окружающие игроки;
+4. **Смерть** — автономный бот возрождается через `RespawnSeconds`; при логауте владельца его боты сохраняются и покидают мир.
 
-В записях, комментариях и сообщениях текстовые смайлы автоматически заменяются на **цветные иконки клиента** (через `|T...|t` текстуры — работает в 3.3.5 без аддонов):
+## Примечания
 
-| Ввод | Иконка |
-|---|---|
-| `:)` `:-)` | Звезда-улыбка |
-| `:D` `:-D` | Большой смех (гемы) |
-| `;)` `;-)` | Подмигивание (глаз) |
-| `:P` `:-P` | Язык (еда) |
-| `:(` `:-(` | Грусть (тёмный чарм) |
-| `>:(` | Злость (красный гем) |
-| `<3` | Сердце (розы) |
-| `</3` | Разбитое сердце (валентинка) |
-| `o_O` `O_o` | Удивление (глаз) |
-| `:O` | Шок (гем) |
-| `Zzz` `zzz` | Сон (кровать) |
-| `:*` | Поцелуй (гем) |
-| `\o/` | Ура! (игрушка) |
+- Модуль рассчитан на ветку AzerothCore 3.3.5a; API ядра периодически меняется — при ошибках компиляции сверьте сигнатуры вызовов с вашей версией;
+- Боты хранятся как обычные персонажи в базе `characters` — удаление модуля не ломает базу (ботов можно удалить командой `.bot remove` или через БД);
+- Список личностей и реплик — в `src/BotPersonality.cpp`, легко расширяется.
 
-Технически: замена выполняется на сервере **после** очистки от цветовых кодов (`|`) и проверки длины — лимит считается по набранным символам, а не по байтам иконок. Длинные последовательности проверяются первыми (`:-)` раньше `:)`), чтобы не было ложных срабатываний.
+## Лицензия
 
-## Локализация
-
-**Полная поддержка английского и русского** (а также frFR, deDE, esES, esMX, zhCN, zhTW, koKR):
-
-- EN — дефолт (`module_string`), RU — перевод (`module_string_locale`).
-- Игрок получает сообщения на локали своего клиента автоматически.
-- Если SQL строк не применён — встроенные английские fallback-строки в коде.
-- Весь пользовательский текст — UTF-8: кириллица в статусах, постах, комментариях и сообщениях работает корректно (валидация `Utf8toWStr`, лимиты в символах, регистронезависимый поиск кириллических имён).
-
-## База данных
-
-Данные игроков хранятся в **acore_characters** (привязаны к персонажам):
-
-| Таблица | Назначение |
-|---|---|
-| `socn_profiles` | guid, статус |
-| `socn_posts` | записи стены (id, автор, текст, время) |
-| `socn_post_likes` | лайки (postId, voterGuid) |
-| `socn_comments` | комментарии (id, postId, автор, текст) |
-| `socn_messages` | личные сообщения (id, отправитель, получатель, текст) |
-| `socn_friends` | друзья (взаимные пары owner/friend) |
-| `socn_friend_requests` | заявки в друзья (from/to) |
-| `socn_enemies` | враги (owner/enemy) |
-| `socn_follows` | подписки (followerGuid, targetGuid) |
-
-**Друзья** — взаимные: заявка → уведомление получателю (онлайн) → `friendaccept` создаёт дружбу у обоих, `frienddel` удаляет у обоих. `.social requests` показывает входящие заявки. **В топе лайков** имена ваших друзей помечаются меткой `[Друг]` (персонально для каждого смотрящего). **Враги** — односторонний список; нельзя добавить себя или друга. **Гильдия** — данные берутся из штатных таблиц `guild`/`guild_member` (интеграция с ядром), показываются гилдмастер, состав и онлайн.
-
-RBAC добавляется в **acore_auth** (permissions 1100, 1101), строки локализации и NPC-терминал — в **acore_world**.
-
-## Конфиг
-
-`conf/mod-social-network.conf.dist`:
-
-| Опция | По умолчанию | Описание |
-|---|---|---|
-| `SocialNetwork.MaxPosts` | `10` | Максимум записей на стене игрока. |
-| `SocialNetwork.MaxStatusLength` | `60` | Максимум длина статуса (символов). |
-| `SocialNetwork.MaxPostLength` | `255` | Максимум длина записи (символов). |
-| `SocialNetwork.WallPageSize` | `5` | Сколько записей показывает `.social wall`. |
-| `SocialNetwork.TopSize` | `10` | Размер топа в `.social top`. |
-| `SocialNetwork.InboxPageSize` | `10` | Сколько сообщений показывает `.social inbox`. |
-| `SocialNetwork.MaxMessageLength` | `255` | Максимум длина сообщения/комментария (символов). |
-| `SocialNetwork.MaxComments` | `20` | Максимум комментариев к записи. |
-
-## Установка
-
-1. Склонируйте модуль в `modules/mod-social-network/` и пересоберите worldserver:
-   ```bash
-   cd azerothcore-wotlk/modules
-   git clone https://git.sourcecraft.dev/crazy-voin/mod-social-network.git mod-social-network
-   ```
-2. Примените SQL из `data/sql/db-characters/social_network.sql`:
-   * таблицы — к базе **acore_characters**;
-   * блок RBAC — к базе **acore_auth**;
-   * блок строк — к базе **acore_world**.
-3. Примените `data/sql/db-world/social_network_update.sql` — к базе **acore_world** (новые строки меню/сообщений/комментариев).
-4. Примените `data/sql/db-world/social_network_world.sql` — к базе **acore_world** (NPC-терминал 911100).
-5. Примените `data/sql/db-world/social_network_friends.sql` — к базам: таблицы → **acore_characters**, строки → **acore_world**.
-6. Примените `data/sql/db-world/social_network_requests.sql` — к базе **acore_world** (строки 82–84).
-7. Опционально скопируйте `conf/mod-social-network.conf.dist` → `mod-social-network.conf` и настройте лимиты.
-8. Чтобы ограничить `.social deleteany`, уберите permission 1101 из роли Player в `rbac_role_permissions`.
+GPL-2.0 (как AzerothCore).
 
 ---
 
-# Social Network — English version
+<a id="english"></a>
 
-Fun module for AzerothCore: an in-game social network — player profiles, a wall of posts, likes, comments, private messages, follows, a like top and an **NPC terminal with an in-client menu**.
+# mod-ai-bots (English)
+
+AI bots module for [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk) (3.3.5a).
+
+Bots are fully-fledged player characters that live on your server: they follow their owner, fight mobs, battle each other (Alliance ↔ Horde), cast class spells, heal themselves, buff up, flee at low health, and chat — each bot has its own personality, appearance and gear.
+
+## Features
+
+### Player bots
+- `.bot add / remove / list / follow` commands (available to all players);
+- The bot follows its owner and fights alongside them;
+- Auto-spawn on player login (optional);
+- Bot level can be synced with the owner's level.
+
+### Autonomous world bots
+- Spawn automatically at server startup in world locations (3 spawn-point modes);
+- Find and attack nearby mobs on their own;
+- PvP: attack bots of the opposing faction;
+- Cast their class spells;
+- Heal and buff themselves;
+- Flee at low HP;
+- Respawn after death after a configurable delay;
+- Chat in English (Say/Yell).
+
+### Bot individuality
+- **Personalities**: 5 characters (Aggressive, Calm, Jester, Grump, Hero) — each with its own battle cries, victory lines, idle chatter, retreat and healing phrases. A bot's personality is permanent (bound to its guid);
+- **Appearance**: random skin, face, hairstyle, hair color and facial features at creation;
+- **Gear**: plate / mail / leather / cloth armor sets and weapons by class, equipped automatically on entering the world;
+- **Unique names**: from an SQL table, a procedural syllable generator (~21,000 combinations), or a mixed mode.
+
+## Installation
+
+### 1. Clone the module
+
+```bash
+cd azerothcore-wotlk/modules
+git clone <repository-url> mod-ai-bots
+```
+
+### 2. Build
+
+The module is picked up by the standard AC-modules mechanism during a normal core rebuild:
+
+```bash
+cd azerothcore-wotlk
+mkdir build && cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ac-server
+make -j$(nproc)
+make install
+```
+
+### 3. Apply SQL
+
+Run the script against the **world** database:
+
+```bash
+mysql -u root -p acore_world < modules/mod-ai-bots/data/sql/db-world/mod_ai_bots.sql
+```
+
+The script creates the following tables:
+- `mod_ai_bots_names` — bot names;
+- `mod_ai_bots_locations` — spawn points for autonomous bots;
+- `mod_ai_bots_settings` — reference settings.
+
+> If the script was applied before and you are upgrading the module, clear the old table data before re-applying the INSERT blocks.
+
+### 4. Configuration
+
+Copy the config to your server directory:
+
+```bash
+cp modules/mod-ai-bots/conf/mod_ai_bots.conf.dist $HOME/ac-server/etc/mod_ai_bots.conf
+```
+
+Edit the options to fit your server (see below).
+
+## Configuration (mod_ai_bots.conf)
+
+### General
+
+| Option | Default | Description |
+|---|---|---|
+| `AiBots.Enable` | 0 | Enable the module |
+| `AiBots.MaxBotsPerPlayer` | 1 | Bot limit per player |
+| `AiBots.AutoSpawn` | 0 | Auto-create a bot on login |
+| `AiBots.AutoSpawnCount` | 1 | How many bots to create on login |
+| `AiBots.UpdateInterval` | 500 | AI tick interval, ms |
+| `AiBots.EnableCombat` | 1 | Allow bots to fight |
+| `AiBots.FollowDistance` | 4.0 | Follow distance, yards |
+| `AiBots.CommandsForAll` | 1 | Commands available to all players |
+| `AiBots.DefaultRaceClass` | "1:1" | Default bot race:class |
+
+### World bots (`AiBots.WorldBots.*`)
+
+| Option | Default | Description |
+|---|---|---|
+| `Enable` | 1 | Enable autonomous bots |
+| `Count` | 10 | Number of bots in the world |
+| `SpawnMode` | 0 | 0 = SQL table, 1 = near online players, 2 = random starting zones |
+| `RespawnSeconds` | 60 | Respawn delay after death, sec |
+| `Level` | 5 | Starting level of autonomous bots |
+| `UseSpells` | 1 | Use class spells |
+
+### Bot chat (`AiBots.WorldBots.Chat.*`)
+
+| Option | Default | Description |
+|---|---|---|
+| `Enable` | 1 | Allow bots to chat |
+| `BattleCryChance` | 30 | Battle cry chance, % |
+| `IdleChance` | 2 | Idle phrase chance (checked every 10 sec), % |
+
+### Tactics (`AiBots.Tactics.*`)
+
+| Option | Default | Description |
+|---|---|---|
+| `FleeHealthPct` | 20 | HP below this → flee (0 = disabled) |
+| `HealThresholdPct` | 50 | HP below this → heal (0 = disabled) |
+| `UseBuffs` | 1 | Buff self and allies before combat |
+
+### Miscellaneous
+
+| Option | Default | Description |
+|---|---|---|
+| `AiBots.SyncOwnerLevel` | 0 | > 0: player bot level = owner's level |
+| `AiBots.Names.Mode` | 2 | 0 = SQL table, 1 = generator, 2 = mixed |
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `.social profile [name]` | Profile: level, play time, guild, status, likes, followers/following. |
-| `.social status <text>` | Set your profile status. |
-| `.social post <text>` | Publish a post on your wall (online followers get notified). |
-| `.social wall [name]` | Latest wall posts (yours or another player's). |
-| `.social delete <id>` | Delete your own post (with its likes/comments). |
-| `.social like <name>` | Like the player's latest post (once per post, not your own). |
-| `.social comment <id> <text>` | Add a comment to a post. |
-| `.social comments <id>` | Read a post's comments. |
-| `.social msg <name> <text>` | Private message (delivered instantly when the receiver is online). |
-| `.social inbox` | Inbox messages. |
-| `.social msgdel <id>` | Delete an inbox message. |
-| `.social follow <name>` | Follow a player. |
-| `.social unfollow <name>` | Unfollow a player. |
-| `.social friend <name>` | Friend request (mutual: the receiver gets notified). |
-| `.social friendaccept <name>` | Accept a friend request (both sides become friends). |
-| `.social frienddecline <name>` | Decline a friend request. |
-| `.social friends` | Friends list. |
-| `.social requests` | Incoming friend requests (who invited you). |
-| `.social frienddel <name>` | Remove from friends (on both sides). |
-| `.social enemy <name>` | Add to enemies (friends not allowed; limit 10). |
-| `.social enemies` | Enemies list. |
-| `.social enemydel <name>` | Remove from enemies. |
-| `.social guild` | Your guild card: guild master, member count, list and online. |
-| `.social top` | Top 10 players by likes. |
-| `.social deleteany <id>` | Delete any post (RBAC 1101 only — moderation). |
+| `.bot add [race:class]` | Create a bot (e.g. `.bot add 7:8` — gnome mage) |
+| `.bot remove <name>` | Remove a bot by name |
+| `.bot remove` (no name) | Remove all of your bots |
+| `.bot list` | List your bots |
+| `.bot follow` | Make your bots follow you again |
 
-## NPC Terminal (in-client interface)
+Races: 1 = Human, 2 = Orc, 3 = Dwarf, 4 = Night Elf, 5 = Undead, 6 = Tauren, 7 = Gnome, 8 = Troll, 10 = Blood Elf, 11 = Draenei.
 
-The world contains the **Social Network communication terminal** (NPC 911100, Stormwind near the Auction House). Clicking it opens a **gossip menu in the client**:
+Classes: 1 = Warrior, 2 = Paladin, 3 = Hunter, 4 = Rogue, 5 = Priest, 7 = Shaman, 8 = Mage, 9 = Warlock, 11 = Druid.
 
-- **My profile** — profile summary.
-- **My wall** — latest posts.
-- **Inbox** — private messages.
-- **Top by likes**.
-- **Hint** — command list.
+## Database extensions
 
-The menu is localized (RU/EN by player's client). Posts/comments/messages are entered via chat commands — the stock gossip input box is not portable in AzerothCore modules, so posting works like this: open the terminal → "Hint" → `.social post Hello!`.
+### Bot names (`mod_ai_bots_names`)
 
-The NPC position can be changed in `data/sql/db-world/social_network_world.sql` (or with `.npc move`).
+```sql
+INSERT INTO mod_ai_bots_names (name) VALUES ('MyName');
+```
 
-## Addon companion (in-client interface)
+Picked up after a server restart. Works in name modes 0 and 2.
 
-The repository includes the **`addon/SocialNetwork/` addon** — a Social Network window inside the 3.3.5 client:
+### Spawn points (`mod_ai_bots_locations`)
 
-- Buttons: **Profile / Wall / Inbox / Top** — browsing without commands.
-- **Input box + "Send"** — publish a wall post right from the window.
-- Slash commands: `/socn` (open the window), `/socn wall <name>` (quick chat query); `/соцсеть` also works.
-- Full interface localization (RU/EN via TOC metadata).
+```sql
+INSERT INTO mod_ai_bots_locations (mapId, x, y, z, o, comment)
+VALUES (0, -8913.0, 133.0, 87.0, 3.7, 'My location');
+```
 
-### How it works
+Used when `AiBots.WorldBots.SpawnMode = 0`. Coordinates can be obtained in-game with `.gps`. Picked up after a restart.
 
-The addon talks to the server through the **stock AzerothCore addon channel** (`AddonChannelCommandHandler`, the `AzerothCore	` protocol), so **no core edits are needed** — the server only needs the `mod-social-network` module with the `.social ...` commands.
+## Project structure
 
-### Addon installation
+```
+mod-ai-bots/
+├── CMakeLists.txt                  # build script (AC-modules)
+├── conf/
+│   └── mod_ai_bots.conf.dist       # configuration
+├── data/sql/db-world/
+│   └── mod_ai_bots.sql             # world DB tables
+└── src/
+    ├── AiBotsScripts.cpp           # .bot commands, hooks, ticker
+    ├── BotMgr.h/.cpp               # bot manager (creation, world entry, removal)
+    ├── BotAI.h/.cpp                # behavior: follow, combat, spells, tactics, chat
+    ├── WorldBots.h/.cpp            # autonomous bots: spawn, respawn
+    ├── BotSpells.h/.cpp            # class abilities and buffs
+    ├── BotPersonality.h/.cpp       # personalities and chat lines
+    ├── BotGear.h/.cpp              # appearance and equipment
+    ├── BotNameGen.h/.cpp           # name generator
+    ├── Config_Bots.h/.cpp          # config reader
+    └── Loader/Loader.h             # script loader entry point
+```
 
-1. Copy the `addon/SocialNetwork` folder into the client: `Interface/AddOns/SocialNetwork`.
-2. Restart the client, enable the addon on the character selection screen.
-3. Open the window: `/socn` (or via the NPC terminal).
+## How it works
 
-## Smilies
+1. **Bot creation** — the module inserts a character row into the `characters` database (with a random appearance), then after a few seconds the bot enters the world through the standard player-loading pipeline;
+2. **Behavior** — the `WorldScript::OnUpdate` ticker refreshes bot AI every `AiBots.UpdateInterval` ms: following, target search (mobs within 30 yards, hostile bots within 40 yards), attack (spell → auto-attack), healing/buffs/retreat;
+3. **Chat** — lines are picked from the bot's personality (deterministic, bound to its guid) and spoken via Say/Yell — visible to nearby players;
+4. **Death** — an autonomous bot respawns after `RespawnSeconds`; when the owner logs out, their bots are saved and leave the world.
 
-In posts, comments and messages text emoticons are automatically replaced with **colored client icons** (via `|T...|t` textures — works in 3.3.5 without addons):
+## Notes
 
-| Input | Icon |
-|---|---|
-| `:)` `:-)` | Star smile |
-| `:D` `:-D` | Big grin (gems) |
-| `;)` `;-)` | Wink (eye) |
-| `:P` `:-P` | Tongue (food) |
-| `:(` `:-(` | Sad (dark charm) |
-| `>:(` | Angry (red gem) |
-| `<3` | Heart (roses) |
-| `</3` | Broken heart (valentine) |
-| `o_O` `O_o` | Surprised (eye) |
-| `:O` | Shock (gem) |
-| `Zzz` `zzz` | Sleep (bed) |
-| `:*` | Kiss (gem) |
-| `\o/` | Hooray! (toy) |
+- The module targets the AzerothCore 3.3.5a branch; the core API changes over time — if compilation fails, verify call signatures against your core version;
+- Bots are stored as regular characters in the `characters` database — removing the module does not break anything (bots can be removed via `.bot remove` or the database);
+- The personality and chat line lists live in `src/BotPersonality.cpp` and are easy to extend.
 
-Technically: the replacement happens on the server **after** stripping color codes (`|`) and the length check — the limit counts typed characters, not icon bytes. Longer sequences are matched first (`:-)` before `:)`) to avoid false matches.
+## License
 
-## Localization
-
-**Full English and Russian support** (plus frFR, deDE, esES, esMX, zhCN, zhTW, koKR):
-
-- EN — default (`module_string`), RU — translation (`module_string_locale`).
-- Each player automatically receives messages in their client's locale.
-- If the string SQL is not applied — built-in English fallback strings in the code.
-- All user text is UTF-8: Cyrillic in statuses, posts, comments and messages works correctly (`Utf8toWStr` validation, character-based limits, case-insensitive search for Cyrillic names).
-
-## Database
-
-Player data is stored in **acore_characters** (bound to characters):
-
-| Table | Purpose |
-|---|---|
-| `socn_profiles` | guid, status |
-| `socn_posts` | wall posts (id, author, text, time) |
-| `socn_post_likes` | likes (postId, voterGuid) |
-| `socn_comments` | comments (id, postId, author, text) |
-| `socn_messages` | private messages (id, sender, receiver, text) |
-| `socn_friends` | friends (mutual owner/friend pairs) |
-| `socn_friend_requests` | friend requests (from/to) |
-| `socn_enemies` | enemies (owner/enemy) |
-| `socn_follows` | follows (followerGuid, targetGuid) |
-
-**Friends** are mutual: request → online notification → `friendaccept` creates the friendship on both sides, `frienddel` removes it on both sides. `.social requests` lists incoming requests. **In the like top**, your friends' names are marked with a `[Friend]` tag (per viewer). **Enemies** — one-directional list; you cannot add yourself or a friend. **Guild** — data comes from the stock `guild`/`guild_member` tables (core integration): guild master, roster and online status are shown.
-
-RBAC goes into **acore_auth** (permissions 1100, 1101), localization strings and the NPC terminal — into **acore_world**.
-
-## Configuration
-
-`conf/mod-social-network.conf.dist`:
-
-| Option | Default | Description |
-|---|---|---|
-| `SocialNetwork.MaxPosts` | `10` | Max wall posts per player. |
-| `SocialNetwork.MaxStatusLength` | `60` | Max status length (characters). |
-| `SocialNetwork.MaxPostLength` | `255` | Max post length (characters). |
-| `SocialNetwork.WallPageSize` | `5` | How many posts `.social wall` shows. |
-| `SocialNetwork.TopSize` | `10` | Top size in `.social top`. |
-| `SocialNetwork.InboxPageSize` | `10` | How many messages `.social inbox` shows. |
-| `SocialNetwork.MaxMessageLength` | `255` | Max message/comment length (characters). |
-| `SocialNetwork.MaxComments` | `20` | Max comments per post. |
-
-## Installation
-
-1. Clone the module into `modules/mod-social-network/` and rebuild the worldserver:
-   ```bash
-   cd azerothcore-wotlk/modules
-   git clone https://git.sourcecraft.dev/crazy-voin/mod-social-network.git mod-social-network
-   ```
-2. Apply the SQL from `data/sql/db-characters/social_network.sql`:
-   * tables → to the **acore_characters** database;
-   * RBAC block → to the **acore_auth** database;
-   * strings block → to the **acore_world** database.
-3. Apply `data/sql/db-world/social_network_update.sql` → to **acore_world** (new menu/message/comment strings).
-4. Apply `data/sql/db-world/social_network_world.sql` → to **acore_world** (NPC terminal 911100).
-5. Apply `data/sql/db-world/social_network_friends.sql` — databases: tables → **acore_characters**, strings → **acore_world**.
-6. Apply `data/sql/db-world/social_network_requests.sql` → to **acore_world** (strings 82–84).
-7. Optionally copy `conf/mod-social-network.conf.dist` → `mod-social-network.conf` and tune the limits.
-8. To restrict `.social deleteany`, remove permission 1101 from the Player role in `rbac_role_permissions`.
+GPL-2.0 (same as AzerothCore).
